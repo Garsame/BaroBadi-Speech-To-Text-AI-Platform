@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic[email]
+pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+alembic
+celery
+bcrypt==3.2.2
+ffmpeg-python
+psycopg2-binary
+pytest
+yt-dlp
+google-genai

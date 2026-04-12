@@ -1,0 +1,41 @@
+# Environment Variables (CRITICAL: NEVER PUSH .ENV)
+.env
+*/.env
+*/*.env
+
+# Backend (Python / FastAPI)
+backend/venv/
+backend/env/
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/sql_app.db
+backend/alembic.ini
+
+# Massive Files & Upload Directories
+backend/uploads/
+backend/temp_media/
+backend/temp_youtube/
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.mp3
+*.wav
+
+# Frontend (Next.js / Node)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
