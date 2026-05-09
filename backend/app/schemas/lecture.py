@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class LectureBase(BaseModel):
-    title: str
+    title: Optional[str] = None
     source_type: str
     source_url: Optional[str] = None
 
@@ -17,6 +17,7 @@ class LectureCreate(LectureBase):
 class TranscriptDetail(BaseModel):
     raw_text: str
     cleaned_text: Optional[str] = None
+    metadata_json: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 

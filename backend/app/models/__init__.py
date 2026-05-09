@@ -6,3 +6,4 @@ from .transcript import Transcript
 from .note import Note
 from .media_asset import MediaAsset
 from .log import ActivityLog, SystemLog
+from .chat_message import ChatMessageRole, LectureChatMessage

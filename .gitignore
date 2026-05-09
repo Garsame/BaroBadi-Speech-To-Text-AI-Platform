@@ -7,8 +7,12 @@
 backend/venv/
 backend/env/
 backend/__pycache__/
+**/__pycache__/
 backend/*.pyc
+*.py[cod]
+*$py.class
 backend/.pytest_cache/
+pytest-cache-files-*/
 backend/sql_app.db
 backend/alembic.ini
 
@@ -16,6 +20,11 @@ backend/alembic.ini
 backend/uploads/
 backend/temp_media/
 backend/temp_youtube/
+backend/temp_youtube_transcripts/
+*.db
+*.sqlite
+*.sqlite3
+*.log
 *.mp4
 *.mkv
 *.avi

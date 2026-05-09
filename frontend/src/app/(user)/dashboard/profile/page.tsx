@@ -3,6 +3,22 @@
 import React, { useState, useEffect, useRef } from "react";
 import { apiUrl, authHeaders } from "@/lib/api";
 
+interface ProfileResponse {
+  full_name?: string | null;
+  email?: string | null;
+  profile_picture_url?: string | null;
+}
+
+interface ProfilePayload {
+  full_name: string;
+  email: string;
+  password?: string;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function UserProfilePage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -15,7 +31,7 @@ export default function UserProfilePage() {
   useEffect(() => {
      fetch(apiUrl("/api/v1/auth/me"), { headers: authHeaders() })
       .then(r => r.json())
-      .then(d => {
+      .then((d: ProfileResponse) => {
          setName(d.full_name || "");
          setEmail(d.email || "");
          if (d.profile_picture_url) {
@@ -29,7 +45,7 @@ export default function UserProfilePage() {
       e.preventDefault();
       try {
           setMessage({ text: "Saving...", type: "success" });
-          const payload: any = { full_name: name, email };
+          const payload: ProfilePayload = { full_name: name, email };
           if (password) payload.password = password;
           
           const res = await fetch(apiUrl("/api/v1/auth/me/profile"), {
@@ -41,11 +57,12 @@ export default function UserProfilePage() {
           if (!res.ok) throw new Error("Failed to update profile");
           setMessage({ text: "Profile updated successfully!", type: "success" });
           setPassword("");
-      } catch (err: any) {
-          if (err.message === "Failed to update profile" || err.message.includes("fetch") || err.message.includes("NetworkError")) {
+      } catch (err: unknown) {
+          const message = errorMessage(err, "Failed to update profile");
+          if (message === "Failed to update profile" || message.includes("fetch") || message.includes("NetworkError")) {
              setMessage({ text: "Profile updated successfully! (Note: Dev server auto-reloaded)", type: "success" });
           } else {
-             setMessage({ text: err.message, type: "error" });
+             setMessage({ text: message, type: "error" });
           }
       }
   };
@@ -68,16 +85,17 @@ export default function UserProfilePage() {
               
               if (!res.ok) throw new Error("Failed to upload image");
               
-              const data = await res.json();
+              const data = (await res.json()) as ProfileResponse;
               if (data.profile_picture_url) {
                   setProfilePic(apiUrl(data.profile_picture_url));
                   setMessage({ text: "Image uploaded! (Note: Dev server auto-reloaded)", type: "success" });
               }
-          } catch (err: any) {
-             if (err.message.includes("fetch") || err.message.includes("NetworkError")) {
+          } catch (err: unknown) {
+             const message = errorMessage(err, "Failed to upload image");
+             if (message.includes("fetch") || message.includes("NetworkError")) {
                  setMessage({ text: "Image uploaded! (Note: Dev server auto-reloaded)", type: "success" });
              } else {
-                 setMessage({ text: `Upload Error: ${err.message}`, type: "error" });
+                 setMessage({ text: `Upload Error: ${message}`, type: "error" });
              }
           }
       }
@@ -93,12 +111,13 @@ export default function UserProfilePage() {
           if (!res.ok) throw new Error("Failed to remove image");
           setProfilePic(null);
           setMessage({ text: "Profile Image permanently deleted.", type: "success" });
-      } catch (err: any) {
-          if (err.message.includes("fetch") || err.message.includes("NetworkError")) {
+      } catch (err: unknown) {
+          const message = errorMessage(err, "Failed to remove image");
+          if (message.includes("fetch") || message.includes("NetworkError")) {
              setProfilePic(null);
              setMessage({ text: "Profile Image permanently deleted. (Note: Dev server auto-reloaded)", type: "success" });
           } else {
-             setMessage({ text: err.message, type: "error" });
+             setMessage({ text: message, type: "error" });
           }
       }
   };

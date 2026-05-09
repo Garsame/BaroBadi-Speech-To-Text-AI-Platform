@@ -13,15 +13,14 @@ export default function NewLecturePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
       if (sourceType === "youtube") {
         const payload = {
-          title: title || "",
           source_type: "youtube",
           source_url: url || "",
         };
@@ -42,8 +41,12 @@ export default function NewLecturePage() {
           throw new Error("Please select a file to upload.");
         }
 
+        if (!title.trim()) {
+          throw new Error("Please enter a lecture title for the uploaded video.");
+        }
+
         const formData = new FormData();
-        formData.append("title", title || "");
+        formData.append("title", title.trim());
         formData.append("file", file);
 
         const res = await fetch(apiUrl("/api/v1/lectures/upload"), {
@@ -79,7 +82,7 @@ export default function NewLecturePage() {
     <div style={{ maxWidth: "600px", margin: "0 auto" }}>
       <h1>Add New Lecture</h1>
       <p style={{ marginBottom: "2rem" }}>
-        Provide a lecture video or YouTube link to generate Somali notes.
+        Choose how you want to submit the lecture for Somali note generation.
       </p>
 
       {error && (
@@ -103,109 +106,157 @@ export default function NewLecturePage() {
       >
         <div>
           <label
-            style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
-          >
-            Lecture Title
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Introduction to Physics"
-            required
-            style={{
-              width: "100%",
-              padding: "0.75rem",
-              borderRadius: "8px",
-              border: "1px solid var(--border-color)",
-              backgroundColor: "var(--bg-color)",
-              color: "var(--text-color)",
-            }}
-          />
-        </div>
-
-        <div>
-          <label
-            style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
+            style={{ display: "block", fontWeight: "bold", marginBottom: "0.75rem" }}
           >
             Source Type
           </label>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-            <label
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "0.75rem",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setSourceType("youtube")}
+              style={{
+                padding: "0.9rem 1rem",
+                borderRadius: "10px",
+                border:
+                  sourceType === "youtube"
+                    ? "2px solid var(--primary-color)"
+                    : "1px solid var(--border-color)",
+                background:
+                  sourceType === "youtube"
+                    ? "rgba(99, 102, 241, 0.08)"
+                    : "transparent",
+                color: "var(--text-color)",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
             >
-              <input
-                type="radio"
-                name="source"
-                value="youtube"
-                checked={sourceType === "youtube"}
-                onChange={() => setSourceType("youtube")}
-              />
               YouTube Link
-            </label>
-            <label
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSourceType("upload")}
+              style={{
+                padding: "0.9rem 1rem",
+                borderRadius: "10px",
+                border:
+                  sourceType === "upload"
+                    ? "2px solid var(--primary-color)"
+                    : "1px solid var(--border-color)",
+                background:
+                  sourceType === "upload"
+                    ? "rgba(99, 102, 241, 0.08)"
+                    : "transparent",
+                color: "var(--text-color)",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
             >
-              <input
-                type="radio"
-                name="source"
-                value="upload"
-                checked={sourceType === "upload"}
-                onChange={() => setSourceType("upload")}
-              />
               Video Upload
-            </label>
+            </button>
           </div>
         </div>
 
         {sourceType === "youtube" ? (
-          <div>
-            <label
-              style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
-            >
-              YouTube URL
-            </label>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
-              required
+          <>
+            <div>
+              <label
+                style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
+              >
+                YouTube URL
+              </label>
+              <input
+                type="url"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                required
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  backgroundColor: "var(--bg-color)",
+                  color: "var(--text-color)",
+                }}
+              />
+            </div>
+
+            <div
               style={{
-                width: "100%",
-                padding: "0.75rem",
+                padding: "0.9rem 1rem",
                 borderRadius: "8px",
-                border: "1px solid var(--border-color)",
-                backgroundColor: "var(--bg-color)",
-                color: "var(--text-color)",
+                background: "rgba(99, 102, 241, 0.08)",
+                color: "var(--text-muted)",
+                lineHeight: 1.7,
               }}
-            />
-          </div>
+            >
+              The lecture title will be filled automatically from the YouTube
+              video title, so you do not need to enter it manually.
+            </div>
+          </>
         ) : (
-          <div>
-            <label
-              style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
-            >
-              Video File
-            </label>
-            <input
-              type="file"
-              accept="video/*"
-              onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
-              required
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                borderRadius: "8px",
-                border: "1px solid var(--border-color)",
-                backgroundColor: "var(--bg-color)",
-                color: "var(--text-color)",
-              }}
-            />
-          </div>
+          <>
+            <div>
+              <label
+                style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
+              >
+                Lecture Title
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="e.g. Introduction to Physics"
+                required
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  backgroundColor: "var(--bg-color)",
+                  color: "var(--text-color)",
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                style={{ display: "block", fontWeight: "bold", marginBottom: "0.5rem" }}
+              >
+                Video File
+              </label>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(event) =>
+                  setFile(event.target.files ? event.target.files[0] : null)
+                }
+                required
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  backgroundColor: "var(--bg-color)",
+                  color: "var(--text-color)",
+                }}
+              />
+            </div>
+          </>
         )}
 
-        <button type="submit" className="btn" style={{ marginTop: "1rem" }} disabled={isLoading}>
+        <button
+          type="submit"
+          className="btn"
+          style={{ marginTop: "1rem" }}
+          disabled={isLoading}
+        >
           {isLoading
             ? "Submitting to Processing Pipeline..."
             : "Submit Lecture for Processing"}

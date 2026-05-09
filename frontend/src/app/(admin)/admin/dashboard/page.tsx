@@ -3,9 +3,26 @@
 import React, { useEffect, useState } from 'react';
 import { apiUrl, authHeaders } from '@/lib/api';
 
+interface AdminStats {
+  total_users: number;
+  total_lectures: number;
+  total_notes: number;
+  automation_success_rate: number;
+}
+
+interface AdminRecentLecture {
+  id: number;
+  title?: string | null;
+  owner_name?: string | null;
+  owner_email?: string | null;
+  source_type?: string | null;
+  status: string;
+  created_at: string;
+}
+
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<any>(null);
-  const [lectures, setLectures] = useState<any[]>([]);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [lectures, setLectures] = useState<AdminRecentLecture[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,7 +37,7 @@ export default function AdminDashboardPage() {
           setStats(await statsRes.json());
           setLectures(await lecturesRes.json());
         }
-      } catch (err) {
+      } catch {
         console.error("Failed to load admin data");
       } finally {
         setLoading(false);

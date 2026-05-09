@@ -63,6 +63,8 @@ export default function MyLecturesPage() {
         return "var(--warning-color)";
       case "failed":
         return "var(--danger-color)";
+      case "canceled":
+        return "#6b7280";
       case "submitted":
         return "#3b82f6";
       default:

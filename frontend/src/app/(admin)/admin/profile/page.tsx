@@ -3,6 +3,29 @@
 import React, { useState, useEffect, useRef } from "react";
 import { apiUrl, authHeaders } from "@/lib/api";
 
+interface ProfileResponse {
+  full_name?: string | null;
+  email?: string | null;
+  profile_picture_url?: string | null;
+  detail?: unknown;
+}
+
+interface ProfilePayload {
+  full_name: string;
+  email: string;
+  password?: string;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function detailMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (detail) return JSON.stringify(detail);
+  return fallback;
+}
+
 export default function AdminProfilePage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -19,14 +42,14 @@ export default function AdminProfilePage() {
       try {
         const res = await fetch(apiUrl("/api/v1/auth/me"), { headers: authHeaders() });
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as ProfileResponse;
           setName(data.full_name || "");
           setEmail(data.email || "");
           if (data.profile_picture_url) {
              setProfilePic(apiUrl(data.profile_picture_url));
           }
         }
-      } catch (err) {}
+      } catch {}
     };
     fetchUser();
   }, []);
@@ -37,7 +60,7 @@ export default function AdminProfilePage() {
     setMessage(null);
 
     try {
-      const payload: any = { full_name: name, email: email };
+      const payload: ProfilePayload = { full_name: name, email: email };
       if (password) payload.password = password;
 
       const res = await fetch(apiUrl("/api/v1/admin/profile"), {
@@ -50,20 +73,21 @@ export default function AdminProfilePage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        const errorMsg = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+        const data = (await res.json()) as ProfileResponse;
+        const errorMsg = detailMessage(data.detail, "Failed to update profile.");
         throw new Error(errorMsg || "Failed to update profile.");
       }
 
       setMessage({ text: "Profile settings updated successfully!", type: "success" });
       setPassword(""); // Clear password field after updating
-    } catch (err: any) {
-      if (err.message.includes("NetworkError") || err.message.includes("Failed to fetch")) {
+    } catch (err: unknown) {
+      const message = errorMessage(err, "Failed to update profile.");
+      if (message.includes("NetworkError") || message.includes("Failed to fetch")) {
           // Uvicorn drops the connection when reloading due to sql_app.db modifications in local dev
           setMessage({ text: "Profile updated successfully! (Note: Dev server auto-reloaded)", type: "success" });
           setPassword(""); 
       } else {
-          setMessage({ text: err.message, type: "error" });
+          setMessage({ text: message, type: "error" });
       }
     } finally {
       setLoading(false);
@@ -92,16 +116,16 @@ export default function AdminProfilePage() {
               });
               
               if (!res.ok) {
-                  const data = await res.json();
-                  throw new Error(data.detail?.map ? JSON.stringify(data.detail) : data.detail || "Upload failed");
+                  const data = (await res.json()) as ProfileResponse;
+                  throw new Error(detailMessage(data.detail, "Upload failed"));
               }
-              const data = await res.json();
+              const data = (await res.json()) as ProfileResponse;
               if(data.profile_picture_url) {
                   setProfilePic(apiUrl(data.profile_picture_url));
                   setMessage({ text: "Image successfully uploaded and routed to local disk storage!", type: "success" });
               }
-          } catch (err: any) {
-              setMessage({ text: `Upload Error: ${err.message}`, type: "error" });
+          } catch (err: unknown) {
+              setMessage({ text: `Upload Error: ${errorMessage(err, "Upload failed")}`, type: "error" });
           }
       }
   };
@@ -118,12 +142,13 @@ export default function AdminProfilePage() {
           
           setProfilePic(null);
           setMessage({ text: "Profile Image permanently deleted from local disk mapping.", type: "success" });
-      } catch (err: any) {
-          if (err.message.includes("NetworkError") || err.message.includes("Failed to fetch")) {
+      } catch (err: unknown) {
+          const message = errorMessage(err, "Failed to remove image");
+          if (message.includes("NetworkError") || message.includes("Failed to fetch")) {
              setProfilePic(null);
              setMessage({ text: "Profile Image permanently deleted. (Note: Dev server auto-reloaded)", type: "success" });
           } else {
-             setMessage({ text: err.message, type: "error" });
+             setMessage({ text: message, type: "error" });
           }
       }
   };

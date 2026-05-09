@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import Any
 
 from app.core.database import get_db
@@ -9,6 +8,8 @@ from app.models.lecture import Lecture, LectureStatus
 from app.models.note import Note
 from app.models.log import SystemLog
 from app.api.dependencies import get_current_active_admin
+from app.schemas.user import User as UserResponse, UserCreate
+from app.services.auth_service import AuthService
 
 router = APIRouter()
 
@@ -81,6 +82,45 @@ def get_system_logs(
         } for log in logs
     ]
 
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class AdminUserCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+
+@router.post("/users", response_model=UserResponse)
+def create_user_by_admin(
+    *,
+    db: Session = Depends(get_db),
+    user_in: AdminUserCreate,
+    current_admin: User = Depends(get_current_active_admin),
+) -> Any:
+    auth_service = AuthService(db)
+    existing_user = auth_service.get_user_by_email(email=user_in.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="A user with this email already exists.")
+
+    created_user = auth_service.create_user(
+        UserCreate(
+            full_name=user_in.full_name,
+            email=user_in.email,
+            password=user_in.password,
+        ),
+        role=RoleEnum.user,
+    )
+
+    db.add(
+        SystemLog(
+            level="INFO",
+            message=f"Admin {current_admin.email} created user {created_user.email}",
+        )
+    )
+    db.commit()
+    db.refresh(created_user)
+    return created_user
+
 @router.get("/users")
 def get_all_users(
     db: Session = Depends(get_db),
@@ -97,9 +137,6 @@ def get_all_users(
             "created_at": u.created_at
         } for u in users
     ]
-
-from pydantic import BaseModel
-from typing import Optional
 
 class AdminUpdate(BaseModel):
     full_name: str

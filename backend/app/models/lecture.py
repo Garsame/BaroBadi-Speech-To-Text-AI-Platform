@@ -9,6 +9,7 @@ class LectureStatus(str, enum.Enum):
     processing = "processing"
     completed = "completed"
     failed = "failed"
+    canceled = "canceled"
 
 class Lecture(Base):
     __tablename__ = "lectures"
@@ -28,3 +29,9 @@ class Lecture(Base):
     transcript = relationship("Transcript", back_populates="lecture", uselist=False)
     notes = relationship("Note", back_populates="lecture", uselist=False)
     media_asset = relationship("MediaAsset", back_populates="lecture", uselist=False)
+    chat_messages = relationship(
+        "LectureChatMessage",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+        order_by="LectureChatMessage.created_at",
+    )

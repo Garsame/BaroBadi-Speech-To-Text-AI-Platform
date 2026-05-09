@@ -3,8 +3,17 @@
 import React, { useEffect, useState } from 'react';
 import { apiUrl, authHeaders } from '@/lib/api';
 
+interface AdminLecture {
+  id: number;
+  title?: string | null;
+  owner_name?: string | null;
+  owner_email?: string | null;
+  source_type?: string | null;
+  status: string;
+}
+
 export default function LecturesPage() {
-  const [lectures, setLectures] = useState<any[]>([]);
+  const [lectures, setLectures] = useState<AdminLecture[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -12,7 +21,7 @@ export default function LecturesPage() {
       try {
         const res = await fetch(apiUrl("/api/v1/admin/recent-lectures?limit=100"), { headers: authHeaders() });
         if (res.ok) setLectures(await res.json());
-      } catch (err) {} finally {
+      } catch {} finally {
         setLoading(false);
       }
     };

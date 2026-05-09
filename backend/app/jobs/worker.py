@@ -4,9 +4,10 @@ import uuid
 
 from app.core.database import SessionLocal
 from app.jobs.celery_app import celery_app
-from app.jobs.pipeline import create_system_log
+from app.jobs.pipeline import LectureProcessingCanceled, create_system_log, raise_if_canceled
 from app.models.job import JobStage, JobStatus, ProcessingJob
 from app.models.lecture import Lecture, LectureStatus
+from app.services.ai_error_utils import format_exception_for_user
 from app.services.youtube_service import sanitize_terminal_text
 
 logger = logging.getLogger("somali_notes.worker")
@@ -34,6 +35,12 @@ def process_lecture_pipeline(self, lecture_id: int):
         db.close()
         return
 
+    if str(job.status).endswith("canceled") or str(job.stage).endswith("canceled") or (
+        lecture and str(lecture.status).endswith("canceled")
+    ):
+        db.close()
+        return
+
     job.task_id = self.request.id
     job.status = JobStatus.running
     job.started_at = datetime.utcnow()
@@ -49,6 +56,7 @@ def process_lecture_pipeline(self, lecture_id: int):
         from app.jobs.pipeline import execute_pipeline
 
         execute_pipeline(db, job, lecture_id)
+        raise_if_canceled(db, job, lecture_id, lecture)
 
         job.status = JobStatus.success
         job.stage = JobStage.completed
@@ -58,9 +66,35 @@ def process_lecture_pipeline(self, lecture_id: int):
             lecture.status = LectureStatus.completed
         db.commit()
         create_system_log(db, "INFO", "Lecture job finished.", lecture_id)
+    except LectureProcessingCanceled:
+        db.refresh(job)
+        if lecture:
+            db.refresh(lecture)
+            lecture.status = LectureStatus.canceled
+
+        job.status = JobStatus.canceled
+        job.stage = JobStage.canceled
+        job.error_message = None
+        job.completed_at = job.completed_at or datetime.utcnow()
+        db.commit()
     except Exception as e:
+        db.refresh(job)
+        if lecture:
+            db.refresh(lecture)
+
+        if str(job.status).endswith("canceled") or str(job.stage).endswith("canceled") or (
+            lecture and str(lecture.status).endswith("canceled")
+        ):
+            job.status = JobStatus.canceled
+            job.stage = JobStage.canceled
+            job.error_message = None
+            job.completed_at = job.completed_at or datetime.utcnow()
+            db.commit()
+            db.close()
+            return
+
         failed_stage = job.stage
-        failed_progress = _progress_for_stage(failed_stage)
+        failed_progress = max(job.progress_percent, _progress_for_stage(failed_stage))
         logger.exception(
             "Lecture job failed for lecture_id=%s at stage=%s",
             lecture_id,
@@ -69,8 +103,8 @@ def process_lecture_pipeline(self, lecture_id: int):
         job.status = JobStatus.error
         job.stage = JobStage.failed
         job.progress_percent = failed_progress
-        job.completed_at = None
-        job.error_message = sanitize_terminal_text(str(e))
+        job.completed_at = datetime.utcnow()
+        job.error_message = sanitize_terminal_text(format_exception_for_user(e, failed_stage))
         if lecture:
             lecture.status = LectureStatus.failed
         db.commit()
@@ -97,6 +131,12 @@ def process_lecture_pipeline_sync(lecture_id: int):
         db.close()
         return
 
+    if str(job.status).endswith("canceled") or str(job.stage).endswith("canceled") or (
+        lecture and str(lecture.status).endswith("canceled")
+    ):
+        db.close()
+        return
+
     job.task_id = str(uuid.uuid4())
     job.status = JobStatus.running
     job.started_at = datetime.utcnow()
@@ -112,6 +152,7 @@ def process_lecture_pipeline_sync(lecture_id: int):
         from app.jobs.pipeline import execute_pipeline
 
         execute_pipeline(db, job, lecture_id)
+        raise_if_canceled(db, job, lecture_id, lecture)
 
         job.status = JobStatus.success
         job.stage = JobStage.completed
@@ -121,9 +162,35 @@ def process_lecture_pipeline_sync(lecture_id: int):
             lecture.status = LectureStatus.completed
         db.commit()
         create_system_log(db, "INFO", "Lecture job finished.", lecture_id)
+    except LectureProcessingCanceled:
+        db.refresh(job)
+        if lecture:
+            db.refresh(lecture)
+            lecture.status = LectureStatus.canceled
+
+        job.status = JobStatus.canceled
+        job.stage = JobStage.canceled
+        job.error_message = None
+        job.completed_at = job.completed_at or datetime.utcnow()
+        db.commit()
     except Exception as e:
+        db.refresh(job)
+        if lecture:
+            db.refresh(lecture)
+
+        if str(job.status).endswith("canceled") or str(job.stage).endswith("canceled") or (
+            lecture and str(lecture.status).endswith("canceled")
+        ):
+            job.status = JobStatus.canceled
+            job.stage = JobStage.canceled
+            job.error_message = None
+            job.completed_at = job.completed_at or datetime.utcnow()
+            db.commit()
+            db.close()
+            return
+
         failed_stage = job.stage
-        failed_progress = _progress_for_stage(failed_stage)
+        failed_progress = max(job.progress_percent, _progress_for_stage(failed_stage))
         logger.exception(
             "Lecture job failed for lecture_id=%s at stage=%s",
             lecture_id,
@@ -132,8 +199,8 @@ def process_lecture_pipeline_sync(lecture_id: int):
         job.status = JobStatus.error
         job.stage = JobStage.failed
         job.progress_percent = failed_progress
-        job.completed_at = None
-        job.error_message = sanitize_terminal_text(str(e))
+        job.completed_at = datetime.utcnow()
+        job.error_message = sanitize_terminal_text(format_exception_for_user(e, failed_stage))
         if lecture:
             lecture.status = LectureStatus.failed
         db.commit()

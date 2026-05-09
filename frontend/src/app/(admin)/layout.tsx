@@ -3,26 +3,32 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { apiUrl, authHeaders } from "@/lib/api";
+import {
+  apiUrl,
+  authHeaders,
+  fetchCurrentUser,
+  type AuthenticatedUser,
+} from "@/lib/api";
+import { clearSession, getSessionToken } from "@/lib/session";
 import { MdDashboard, MdPeople, MdOutlineOndemandVideo, MdLibraryBooks, MdAddCircleOutline, MdSettings, MdLogout, MdNotifications, MdLightMode, MdDarkMode, MdKeyboardArrowDown, MdBuild, MdMenuBook, MdAutoAwesome, MdSchool, MdAdd } from 'react-icons/md';
 import { FaCheckCircle, FaRocket, FaExclamationTriangle, FaYoutube, FaFileAudio, FaTools } from 'react-icons/fa';
 
-interface User {
+interface SystemNotification {
   id: number;
-  email: string;
-  full_name: string;
-  role: string;
+  level: string;
+  message: string;
+  created_at: string;
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState("dark");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,20 +51,65 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       localStorage.setItem("admin-theme", "dark");
     }
 
+    const redirectToAdminLogin = () => {
+      clearSession();
+      window.location.replace("/admin-login");
+    };
+
     // Fetch user details & recent notifications
     const fetchContext = async () => {
+      const token = getSessionToken();
+
+      if (!token) {
+        redirectToAdminLogin();
+        return;
+      }
+
       try {
-        const [userRes, notifRes] = await Promise.all([
-           fetch(apiUrl("/api/v1/auth/me"), { headers: authHeaders() }),
-           fetch(apiUrl("/api/v1/admin/system-logs?limit=5"), { headers: authHeaders() })
-        ]);
-        if (userRes.ok) setUser(await userRes.json());
-        if (notifRes.ok) setNotifications(await notifRes.json());
-      } catch (err) {} finally {
+        const currentUser = await fetchCurrentUser(token);
+
+        if (currentUser.role !== "admin") {
+          window.location.replace("/dashboard");
+          return;
+        }
+
+        setUser(currentUser);
+
+        const notifRes = await fetch(apiUrl("/api/v1/admin/system-logs?limit=5"), {
+          headers: authHeaders(),
+          cache: "no-store",
+        });
+
+        if (notifRes.ok) {
+          setNotifications((await notifRes.json()) as SystemNotification[]);
+        }
+      } catch {
+        redirectToAdminLogin();
+      } finally {
         setIsLoading(false);
       }
     };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "token" && !getSessionToken()) {
+        redirectToAdminLogin();
+      }
+    };
+
+    const handlePageShow = () => {
+      if (!getSessionToken()) {
+        redirectToAdminLogin();
+      }
+    };
+
     fetchContext();
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, []);
 
   const toggleTheme = () => {
@@ -68,12 +119,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/admin-login");
+    clearSession();
+    window.location.replace("/admin-login");
   };
 
   if (isLoading) return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading Admin Portal...</div>;
-  if (!user || user.role !== "admin") return null;
+  if (!user || user.role !== "admin") {
+    return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Redirecting...</div>;
+  }
 
   const bg = theme === "dark" ? "#0f172a" : "#f8fafc";
   const text = theme === "dark" ? "#f8fafc" : "#0f172a";
@@ -86,13 +139,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <>
       <style>{`
         .admin-theme-aware {
+           --bg-color: ${bg};
+           --text-color: ${text};
+           --secondary-bg: ${cardBg};
+           --border-color: ${border};
            --bg: ${bg};
            --text: ${text};
            --card-bg: ${cardBg};
            --border: ${border};
            --text-muted: ${textMuted};
-           background-color: var(--bg);
-           color: var(--text);
+           background-color: var(--bg-color);
+           color: var(--text-color);
            transition: all 0.3s ease;
         }
         .admin-nav-link:hover {
@@ -202,7 +259,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                    <MdSettings size={20} /> Edit Profile Info
                                 </Link>
                                 <button onClick={handleLogout} style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", color: "#ef4444", padding: "0.5rem", borderRadius: "6px", fontWeight: "bold" }} className="hover:bg-opacity-50">
-                                   <MdLogout size={20} /> Sign Out Default
+                                   <MdLogout size={20} /> Sign Out
                                 </button>
                             </div>
                         </div>

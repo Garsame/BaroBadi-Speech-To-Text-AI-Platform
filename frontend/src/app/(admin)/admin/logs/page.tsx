@@ -3,8 +3,15 @@
 import React, { useEffect, useState } from 'react';
 import { apiUrl, authHeaders } from '@/lib/api';
 
+interface SystemLog {
+  id: number;
+  created_at: string;
+  level: string;
+  message: string;
+}
+
 export default function LogsPage() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<SystemLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -12,7 +19,7 @@ export default function LogsPage() {
       try {
         const res = await fetch(apiUrl("/api/v1/admin/system-logs"), { headers: authHeaders() });
         if (res.ok) setLogs(await res.json());
-      } catch (err) {} finally {
+      } catch {} finally {
         setLoading(false);
       }
     };

@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiUrl, getErrorMessage } from "@/lib/api";
+import { apiUrl, fetchCurrentUser, getErrorMessage } from "@/lib/api";
+import { clearSession, persistSession } from "@/lib/session";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -44,9 +45,14 @@ export default function SignInPage() {
       }
 
       const data = (await res.json()) as { access_token: string };
-      window.localStorage.setItem("token", data.access_token);
-      router.push("/dashboard/my-lectures?login=success");
+      const currentUser = await fetchCurrentUser(data.access_token);
+
+      persistSession(data.access_token);
+      router.replace(
+        currentUser.role === "admin" ? "/admin/dashboard" : "/dashboard",
+      );
     } catch (err: unknown) {
+      clearSession();
       setError(
         err instanceof Error ? err.message : "An unexpected error occurred.",
       );

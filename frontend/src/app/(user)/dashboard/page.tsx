@@ -92,7 +92,7 @@ export default function UserDashboard() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {lectures.slice(0, 5).map((lecture) => (
-              <Link href={`/dashboard/my-lectures/${lecture.id}`} key={lecture.id} className="lecture-list-item">
+              <Link href={`/dashboard/lecture/${lecture.id}`} key={lecture.id} className="lecture-list-item">
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                   <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "var(--secondary-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem" }}>
                     {lecture.source_type === 'youtube' ? <FaYoutube size={26} color="#ef4444" /> : <FaFileAudio size={26} color="#8b5cf6" />}

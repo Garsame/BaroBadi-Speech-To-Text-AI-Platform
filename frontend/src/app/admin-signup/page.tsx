@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiUrl } from "@/lib/api";
+import { apiUrl, fetchCurrentUser } from "@/lib/api";
+import { clearSession, persistSession } from "@/lib/session";
 
 export default function AdminSignUpPage() {
   const router = useRouter();
@@ -61,14 +62,22 @@ export default function AdminSignUpPage() {
       });
 
       if (loginRes.ok) {
-        const loginData = await loginRes.json();
-        localStorage.setItem("token", loginData.access_token);
-        router.push("/admin/dashboard");
+        const loginData = (await loginRes.json()) as { access_token: string };
+        const currentUser = await fetchCurrentUser(loginData.access_token);
+
+        persistSession(loginData.access_token);
+        router.replace(
+          currentUser.role === "admin" ? "/admin/dashboard" : "/dashboard",
+        );
       } else {
-         router.push("/admin-login");
+        clearSession();
+        router.replace("/admin-login");
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      clearSession();
+      setError(
+        err instanceof Error ? err.message : "Failed to create Admin account.",
+      );
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 import os
 import shutil
+import math
 
 import ffmpeg
 
@@ -72,6 +73,45 @@ class MediaService:
         except ffmpeg.Error as e:
             raise RuntimeError(f"FFmpeg failed to extract audio: {e.stderr.decode() if e.stderr else str(e)}")
 
+    def split_audio(self, audio_path: str, chunk_duration_seconds: int) -> list[str]:
+        if chunk_duration_seconds <= 0:
+            return [audio_path]
+
+        duration = self.get_media_duration(audio_path)
+        if duration <= 0 or duration <= chunk_duration_seconds:
+            return [audio_path]
+
+        base_name, _ = os.path.splitext(os.path.basename(audio_path))
+        total_duration = int(math.ceil(duration))
+        chunk_paths: list[str] = []
+
+        for index, start_second in enumerate(range(0, total_duration, chunk_duration_seconds), start=1):
+            chunk_length = min(chunk_duration_seconds, total_duration - start_second)
+            chunk_path = os.path.join(
+                self.temp_dir,
+                f"{base_name}_chunk_{index:03d}.wav",
+            )
+
+            try:
+                stream = ffmpeg.input(audio_path, ss=start_second, t=chunk_length)
+                stream = ffmpeg.output(stream, chunk_path, ac=1, ar="16k", format="wav")
+                ffmpeg.run(
+                    stream,
+                    overwrite_output=True,
+                    quiet=True,
+                    cmd=self.ffmpeg_binary or "ffmpeg",
+                )
+            except FileNotFoundError:
+                raise RuntimeError(self._missing_binary_message("FFmpeg", "FFMPEG_BINARY"))
+            except ffmpeg.Error as e:
+                raise RuntimeError(
+                    f"FFmpeg failed to split audio into chunks: {e.stderr.decode() if e.stderr else str(e)}"
+                )
+
+            chunk_paths.append(chunk_path)
+
+        return chunk_paths
+
     def get_media_duration(self, file_path: str) -> float:
         """
         Returns duration of media in seconds.
@@ -84,6 +124,12 @@ class MediaService:
         except ffmpeg.Error as e:
             pass
         return 0.0
+
+    def get_file_size_bytes(self, file_path: str) -> int | None:
+        try:
+            return os.path.getsize(file_path)
+        except OSError:
+            return None
 
     def cleanup_file(self, file_path: str):
         if os.path.exists(file_path):

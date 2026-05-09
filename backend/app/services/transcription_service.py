@@ -3,6 +3,7 @@ import time
 from typing import Any
 
 from app.core.config import load_settings
+from app.services.genai_client_factory import create_genai_client
 
 try:
     from google import genai
@@ -13,6 +14,24 @@ logger = logging.getLogger("somali_notes.transcription")
 
 
 class TranscriptionService:
+    RECITATION_ERROR_MARKERS = (
+        "finishreason.recitation",
+        "finish_reason=finishreason.recitation",
+        "recitation",
+    )
+
+    RETRYABLE_ERROR_MARKERS = (
+        "server disconnected without sending a response",
+        "getaddrinfo failed",
+        "timed out",
+        "timeout",
+        "503",
+        "unavailable",
+        "connection reset",
+        "temporary failure",
+        "remoteprotocolerror",
+    )
+
     def __init__(self):
         settings = load_settings()
         api_key = (settings.GEMINI_API_KEY or "").strip()
@@ -24,20 +43,34 @@ class TranscriptionService:
             raise RuntimeError(
                 "google-genai is not installed, so real transcription cannot run."
             )
-        self.client = genai.Client(api_key=api_key)
+        self.client = create_genai_client(api_key)
         self.model = settings.GEMINI_TRANSCRIPTION_MODEL
+        self.max_retries = max(1, settings.TRANSCRIPTION_MAX_RETRIES)
+        self.file_ready_timeout_seconds = max(
+            30,
+            settings.GEMINI_FILE_READY_TIMEOUT_SECONDS,
+        )
 
     def _wait_for_file_ready(self, file_name: str):
-        for _ in range(30):
+        attempts = max(1, self.file_ready_timeout_seconds // 2)
+        for _ in range(attempts):
             file_ref = self.client.files.get(name=file_name)
             state = str(getattr(file_ref, "state", "")).upper()
             if state.endswith("ACTIVE") or not state:
                 return file_ref
             if state.endswith("FAILED"):
                 raise RuntimeError("Gemini audio upload failed during processing.")
-            time.sleep(1)
+            time.sleep(2)
 
         raise RuntimeError("Gemini audio upload did not become ready in time.")
+
+    def _is_retryable_error(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(marker in message for marker in self.RETRYABLE_ERROR_MARKERS)
+
+    def is_recitation_error(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(marker in message for marker in self.RECITATION_ERROR_MARKERS)
 
     def _extract_text_from_response(self, response: Any) -> str:
         transcript_text = (getattr(response, "text", "") or "").strip()
@@ -86,7 +119,7 @@ class TranscriptionService:
 
         return ", ".join(summary_parts)
 
-    def transcribe_audio(self, audio_file_path: str) -> str:
+    def _transcribe_audio_once(self, audio_file_path: str) -> str:
         """
         Transcribes audio using the Google Gemini API.
         """
@@ -152,3 +185,29 @@ class TranscriptionService:
                         "Failed to delete Gemini upload %s after transcription.",
                         getattr(uploaded_file, "name", "unknown"),
                     )
+
+    def transcribe_audio(self, audio_file_path: str) -> str:
+        last_error: Exception | None = None
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                if attempt > 1:
+                    logger.warning(
+                        "Retrying Gemini transcription for %s (attempt %s/%s).",
+                        audio_file_path,
+                        attempt,
+                        self.max_retries,
+                    )
+                return self._transcribe_audio_once(audio_file_path)
+            except Exception as exc:
+                last_error = exc
+                if attempt >= self.max_retries or not self._is_retryable_error(exc):
+                    break
+                time.sleep(min(2 ** attempt, 10))
+
+        if last_error is None:
+            raise RuntimeError("Gemini transcription failed for an unknown reason.")
+
+        raise RuntimeError(
+            f"Gemini transcription failed after {self.max_retries} attempt(s): {last_error}"
+        ) from last_error

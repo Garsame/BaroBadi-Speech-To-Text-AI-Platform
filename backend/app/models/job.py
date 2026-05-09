@@ -9,6 +9,7 @@ class JobStatus(str, enum.Enum):
     running = "running"
     success = "success"
     error = "error"
+    canceled = "canceled"
 
 class JobStage(str, enum.Enum):
     validating_input = "validating_input"
@@ -21,6 +22,7 @@ class JobStage(str, enum.Enum):
     saving_results = "saving_results"
     completed = "completed"
     failed = "failed"
+    canceled = "canceled"
 
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"

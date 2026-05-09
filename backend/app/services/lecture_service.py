@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from sqlalchemy.orm import Session, joinedload
 from app.models.lecture import Lecture, LectureStatus
 from app.models.job import JobStage, JobStatus
@@ -9,6 +10,7 @@ from app.schemas.lecture import LectureCreate
 from typing import List, Optional
 
 from fastapi import BackgroundTasks
+from app.jobs.pipeline import CANCEL_MESSAGE, create_system_log
 
 logger = logging.getLogger("somali_notes.lecture_service")
 
@@ -47,7 +49,45 @@ class LectureService:
         )
         if lecture:
             self._sync_lecture_statuses([lecture])
+            self._ensure_ai_analysis(lecture)
         return lecture
+
+    def _ensure_ai_analysis(self, lecture: Lecture) -> None:
+        transcript = lecture.transcript
+        notes = lecture.notes
+
+        if not transcript or not notes:
+            return
+
+        metadata = dict(transcript.metadata_json or {})
+        if metadata.get("analysis"):
+            return
+
+        transcript_text = (transcript.cleaned_text or transcript.raw_text or "").strip()
+        if not transcript_text:
+            return
+
+        try:
+            from app.services.lecture_analysis_service import LectureAnalysisService
+
+            analysis_service = LectureAnalysisService()
+            metadata["analysis"] = analysis_service.analyze_lecture(
+                lecture.title,
+                transcript_text,
+                {
+                    "structured_content": notes.structured_content,
+                    "summary": notes.summary or "",
+                    "key_points": notes.key_points or [],
+                },
+            )
+            transcript.metadata_json = metadata
+            self.db.commit()
+            self.db.refresh(transcript)
+        except Exception:
+            logger.exception(
+                "Failed to generate cached AI analysis for lecture_id=%s.",
+                lecture.id,
+            )
 
     def _sync_lecture_statuses(self, lectures: List[Lecture]) -> None:
         updated = False
@@ -60,7 +100,9 @@ class LectureService:
             job_status = str(lecture.job.status)
             job_stage = str(lecture.job.stage)
 
-            if job_status.endswith("running"):
+            if job_status.endswith("canceled") or job_stage.endswith("canceled"):
+                next_status = LectureStatus.canceled
+            elif job_status.endswith("running"):
                 next_status = LectureStatus.processing
             elif job_status.endswith("success") or job_stage.endswith("completed"):
                 next_status = LectureStatus.completed
@@ -142,4 +184,36 @@ class LectureService:
             from app.jobs.worker import process_lecture_pipeline_sync
             self.background_tasks.add_task(process_lecture_pipeline_sync, lecture.id)
 
+        return lecture
+
+    def cancel_lecture(self, lecture_id: int, owner_id: int) -> Optional[Lecture]:
+        lecture = self.db.query(Lecture).options(joinedload(Lecture.job)).filter(
+            Lecture.id == lecture_id, Lecture.owner_id == owner_id
+        ).first()
+        if not lecture or not lecture.job:
+            return None
+
+        job_status = str(lecture.job.status)
+        job_stage = str(lecture.job.stage)
+
+        if job_status.endswith("canceled") or job_stage.endswith("canceled"):
+            return lecture
+
+        if lecture.job.status not in {JobStatus.pending, JobStatus.running}:
+            raise ValueError("Only lectures that are still processing can be canceled.")
+
+        lecture.status = LectureStatus.canceled
+        lecture.job.status = JobStatus.canceled
+        lecture.job.stage = JobStage.canceled
+        lecture.job.error_message = None
+        lecture.job.completed_at = datetime.utcnow()
+        self.db.commit()
+        create_system_log(
+            self.db,
+            "WARNING",
+            CANCEL_MESSAGE,
+            lecture.id,
+            {"action": "cancel"},
+        )
+        self.db.refresh(lecture)
         return lecture

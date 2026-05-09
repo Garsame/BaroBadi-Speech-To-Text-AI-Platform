@@ -3,27 +3,31 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { apiUrl, authHeaders } from "@/lib/api";
+import {
+  apiUrl,
+  authHeaders,
+  fetchCurrentUser,
+  type AuthenticatedUser,
+} from "@/lib/api";
+import { clearSession, getSessionToken } from "@/lib/session";
 import { MdDashboard, MdPeople, MdOutlineOndemandVideo, MdLibraryBooks, MdAddCircleOutline, MdSettings, MdLogout, MdNotifications, MdLightMode, MdDarkMode, MdKeyboardArrowDown, MdBuild, MdMenuBook, MdAutoAwesome, MdSchool, MdAdd } from 'react-icons/md';
 import { FaCheckCircle, FaRocket, FaExclamationTriangle, FaYoutube, FaFileAudio, FaTools } from 'react-icons/fa';
 
-interface User {
+interface ActivityNotification {
   id: number;
-  email: string;
-  full_name: string;
-  role: string;
-  profile_picture_url?: string | null;
+  action: string;
+  created_at: string;
 }
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState("light");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,26 +49,62 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
       localStorage.setItem("user-theme", "light");
     }
 
+    const redirectToSignIn = () => {
+      clearSession();
+      window.location.replace("/sign-in");
+    };
+
     const fetchContext = async () => {
+      const token = getSessionToken();
+
+      if (!token) {
+        redirectToSignIn();
+        return;
+      }
+
       try {
-        const [userRes, notifRes] = await Promise.all([
-           fetch(apiUrl("/api/v1/auth/me"), { headers: authHeaders() }),
-           fetch(apiUrl("/api/v1/auth/me/activity?limit=5"), { headers: authHeaders() })
-        ]);
-        
-        if (!userRes.ok) throw new Error("Not authenticated");
-        
-        setUser(await userRes.json());
+        const currentUser = await fetchCurrentUser(token);
+
+        if (currentUser.role === "admin") {
+          window.location.replace("/admin/dashboard");
+          return;
+        }
+
+        const notifRes = await fetch(apiUrl("/api/v1/auth/me/activity?limit=5"), {
+          headers: authHeaders(),
+          cache: "no-store",
+        });
+
+        setUser(currentUser);
         if (notifRes.ok) setNotifications(await notifRes.json());
-      } catch (err) {
-        localStorage.removeItem("token");
-        router.push("/sign-in");
+      } catch {
+        redirectToSignIn();
       } finally {
         setIsLoading(false);
       }
     };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "token" && !getSessionToken()) {
+        redirectToSignIn();
+      }
+    };
+
+    const handlePageShow = () => {
+      if (!getSessionToken()) {
+        redirectToSignIn();
+      }
+    };
+
     fetchContext();
-  }, [router]);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === "dark" ? "light" : "dark";
@@ -73,8 +113,8 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/sign-in");
+    clearSession();
+    window.location.replace("/sign-in");
   };
 
   if (isLoading || !user) {
@@ -94,13 +134,17 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     <>
       <style>{`
         .user-theme-aware {
+           --bg-color: ${bg};
+           --text-color: ${text};
+           --secondary-bg: ${cardBg};
+           --border-color: ${border};
            --bg: ${bg};
            --text: ${text};
            --card-bg: ${cardBg};
            --border: ${border};
            --text-muted: ${textMuted};
-           background-color: var(--bg);
-           color: var(--text);
+           background-color: var(--bg-color);
+           color: var(--text-color);
            transition: all 0.3s ease;
         }
         .user-nav-link:hover {

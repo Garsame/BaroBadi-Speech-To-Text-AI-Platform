@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiUrl } from "@/lib/api";
+import { apiUrl, fetchCurrentUser, getErrorMessage } from "@/lib/api";
+import { clearSession, persistSession } from "@/lib/session";
 
 export default function AdminSignInPage() {
   const router = useRouter();
@@ -42,15 +43,23 @@ export default function AdminSignInPage() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || "Failed to sign in as Admin.");
+        throw new Error(
+          await getErrorMessage(res, "Failed to sign in as Admin."),
+        );
       }
 
-      const data = await res.json();
-      localStorage.setItem("token", data.access_token);
-      router.push("/admin/dashboard");
-    } catch (err: any) {
-      setError(err.message);
+      const data = (await res.json()) as { access_token: string };
+      const currentUser = await fetchCurrentUser(data.access_token);
+
+      persistSession(data.access_token);
+      router.replace(
+        currentUser.role === "admin" ? "/admin/dashboard" : "/dashboard",
+      );
+    } catch (err: unknown) {
+      clearSession();
+      setError(
+        err instanceof Error ? err.message : "Failed to sign in as Admin.",
+      );
     } finally {
       setLoading(false);
     }

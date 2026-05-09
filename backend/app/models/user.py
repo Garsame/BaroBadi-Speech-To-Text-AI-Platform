@@ -23,3 +23,4 @@ class User(Base):
     
     lectures = relationship("Lecture", back_populates="owner")
     logs = relationship("ActivityLog", back_populates="user")
+    chat_messages = relationship("LectureChatMessage", back_populates="owner")
