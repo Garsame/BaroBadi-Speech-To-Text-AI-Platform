@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import load_settings
 from app.services.genai_client_factory import create_genai_client
+from app.services.ai_error_utils import format_exception_for_user
 from app.models.chat_message import ChatMessageRole, LectureChatMessage
 from app.models.lecture import Lecture, LectureStatus
 from app.models.user import User
@@ -23,8 +24,15 @@ class LectureChatService:
         self.db = db
 
         settings = load_settings()
-        api_key = (settings.GEMINI_API_KEY or "").strip()
-        if not api_key:
+        self.api_key = (settings.GEMINI_API_KEY or "").strip()
+        self.client = None
+        self.model = settings.GEMINI_CHAT_MODEL
+
+    def _ensure_client(self) -> Any:
+        if self.client is not None:
+            return self.client
+
+        if not self.api_key:
             raise RuntimeError(
                 "GEMINI_API_KEY is not configured in backend/.env, so lecture chat cannot run."
             )
@@ -33,8 +41,8 @@ class LectureChatService:
                 "google-genai is not installed, so lecture chat cannot run."
             )
 
-        self.client = create_genai_client(api_key)
-        self.model = settings.GEMINI_CHAT_MODEL
+        self.client = create_genai_client(self.api_key)
+        return self.client
 
     def _clip_text(self, value: str | None, limit: int) -> str:
         cleaned_value = (value or "").strip()
@@ -55,10 +63,23 @@ class LectureChatService:
         )
 
     def get_messages(self, lecture_id: int, owner_id: int) -> list[LectureChatMessage]:
-        lecture = self._get_lecture_for_chat(lecture_id, owner_id)
-        if not lecture:
+        lecture_exists = (
+            self.db.query(Lecture.id)
+            .filter(Lecture.id == lecture_id, Lecture.owner_id == owner_id)
+            .first()
+        )
+        if not lecture_exists:
             return []
-        return list(lecture.chat_messages or [])
+
+        return (
+            self.db.query(LectureChatMessage)
+            .filter(
+                LectureChatMessage.lecture_id == lecture_id,
+                LectureChatMessage.owner_id == owner_id,
+            )
+            .order_by(LectureChatMessage.created_at.asc(), LectureChatMessage.id.asc())
+            .all()
+        )
 
     def _build_prompt(
         self,
@@ -173,13 +194,18 @@ Student question:
 
         recent_messages = list(lecture.chat_messages or [])[-self.RECENT_MESSAGE_LIMIT :]
         prompt = self._build_prompt(lecture, clean_message, recent_messages)
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config={
-                "temperature": 0.35,
-            },
-        )
+        client = self._ensure_client()
+        try:
+            response = client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config={
+                    "temperature": 0.35,
+                },
+            )
+        except Exception as exc:
+            raise RuntimeError(format_exception_for_user(exc, "lecture_chat")) from exc
+
         assistant_text = self._extract_response_text(response)
         if not assistant_text:
             raise RuntimeError("Gemini returned an empty response for the lecture chatbot.")

@@ -9,6 +9,8 @@ from typing import Any
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import create_access_token
+from app.models.log import ActivityLog, SystemLog
+from app.models.user import RoleEnum
 from app.schemas.user import UserCreate, User
 from app.schemas.token import Token
 from app.services.auth_service import AuthService
@@ -33,6 +35,18 @@ def login_access_token(
         raise HTTPException(status_code=400, detail="Inactive user")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     logger.info("Login success for user_id=%s email=%s", user.id, user.email)
+    action = "ADMIN_LOGIN" if user.role == RoleEnum.admin else "USER_LOGIN"
+    db.add(
+        ActivityLog(
+            action=action,
+            user_id=user.id,
+            details={
+                "email": user.email,
+                "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+            },
+        )
+    )
+    db.commit()
     return {
         "access_token": create_access_token(
             user.id, expires_delta=access_token_expires
@@ -59,7 +73,6 @@ def create_new_user(
     user = auth_service.create_user(user_in)
     
     # Write robust logging for the system and the user
-    from app.models.log import SystemLog, ActivityLog
     sys_log = SystemLog(level="INFO", message=f"New user registered: {user.email}")
     act_log = ActivityLog(action="USER_SIGNUP", user_id=user.id, details={"email": user.email})
     db.add(sys_log)
@@ -88,8 +101,15 @@ def create_new_admin_user(
     user = auth_service.create_user(user_in)
     
     # Elevate to admin
-    from app.models.user import RoleEnum
     user.role = RoleEnum.admin
+    db.add(
+        ActivityLog(
+            action="ADMIN_SIGNUP",
+            user_id=user.id,
+            details={"email": user.email, "role": RoleEnum.admin.value},
+        )
+    )
+    db.add(SystemLog(level="INFO", message=f"New admin registered: {user.email}"))
     db.commit()
     
     logger.info("Admin signup success for user_id=%s email=%s", user.id, user.email)

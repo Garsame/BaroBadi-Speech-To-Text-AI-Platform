@@ -19,6 +19,12 @@ interface ActivityNotification {
   created_at: string;
 }
 
+function resolveProfileImageUrl(profilePictureUrl?: string | null): string | null {
+  if (!profilePictureUrl) return null;
+  if (/^https?:\/\//i.test(profilePictureUrl)) return profilePictureUrl;
+  return apiUrl(profilePictureUrl);
+}
+
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -39,6 +45,24 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    function handleUserProfileUpdated(event: Event) {
+      const detail = (event as CustomEvent<Partial<AuthenticatedUser>>).detail;
+      if (!detail) return;
+
+      setUser((currentUser) => {
+        if (!currentUser) return currentUser;
+        return {
+          ...currentUser,
+          ...detail,
+        };
+      });
+    }
+
+    window.addEventListener("user-profile-updated", handleUserProfileUpdated);
+    return () => window.removeEventListener("user-profile-updated", handleUserProfileUpdated);
   }, []);
 
   useEffect(() => {
@@ -129,6 +153,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const textMuted = theme === "dark" ? "#94a3b8" : "#64748b";
 
   const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : "U";
+  const profileImageUrl = resolveProfileImageUrl(user.profile_picture_url);
 
   return (
     <>
@@ -233,8 +258,8 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
                 <div style={{ position: "relative", marginLeft: "1rem" }}>
                     <button onClick={() => { setShowProfile(!showProfile); setShowNotifications(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px" }}>
                         <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#38bdf8", overflow: "hidden", display: "flex", justifyContent: "center", alignItems: "center", border: `2px solid ${border}` }}>
-                             {user.profile_picture_url ? (
-                                <img src={apiUrl(user.profile_picture_url)} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                             {profileImageUrl ? (
+                                <img src={profileImageUrl} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                              ) : (
                                 <span style={{ fontSize: "1.2rem", color: "white", fontWeight: "bold" }}>{getInitials(user.full_name)}</span>
                              )}
@@ -245,8 +270,8 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
                         <div style={{ position: "absolute", top: "100%", right: "0", background: cardBg, border: `1px solid ${border}`, borderRadius: "8px", width: "250px", padding: "1rem", boxShadow: "0 10px 15px rgba(0,0,0,0.1)", zIndex: 100, marginTop: "10px" }}>
                             <div style={{ textAlign: "center", marginBottom: "1rem" }}>
                                 <div style={{ width: "60px", height: "60px", borderRadius: "50%", background: "#38bdf8", overflow: "hidden", display: "inline-flex", justifyContent: "center", alignItems: "center", fontSize: "1.5rem", fontWeight: "bold", marginBottom: "10px" }}>
-                                     {user.profile_picture_url ? (
-                                        <img src={apiUrl(user.profile_picture_url)} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                     {profileImageUrl ? (
+                                        <img src={profileImageUrl} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                                      ) : (
                                         <span style={{ color: "white" }}>{getInitials(user.full_name)}</span>
                                      )}

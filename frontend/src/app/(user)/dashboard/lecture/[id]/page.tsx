@@ -1,7 +1,7 @@
 "use client";
 
 import React, { use, useEffect, useRef, useState } from "react";
-import { FaPause, FaPlay } from "react-icons/fa";
+import { FaArrowRight, FaPause, FaPlay, FaSyncAlt } from "react-icons/fa";
 import { apiUrl, authHeaders, getErrorMessage } from "@/lib/api";
 import { getSessionToken } from "@/lib/session";
 
@@ -114,6 +114,7 @@ async function fetchLectureChatMessages(
 ): Promise<LectureChatMessage[]> {
   const response = await fetch(apiUrl(`/api/v1/lectures/${id}/chat/messages`), {
     headers: authHeaders(),
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -123,6 +124,44 @@ async function fetchLectureChatMessages(
   }
 
   return (await response.json()) as LectureChatMessage[];
+}
+
+function getChatMessageTimestamp(message: LectureChatMessage): number {
+  const timestamp = new Date(message.created_at).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function mergeLectureChatMessages(
+  currentMessages: LectureChatMessage[],
+  nextMessages: LectureChatMessage[],
+): LectureChatMessage[] {
+  const messagesById = new Map<number, LectureChatMessage>();
+
+  currentMessages.forEach((message) => messagesById.set(message.id, message));
+  nextMessages.forEach((message) => messagesById.set(message.id, message));
+
+  return Array.from(messagesById.values()).sort((left, right) => {
+    const timestampDifference =
+      getChatMessageTimestamp(left) - getChatMessageTimestamp(right);
+
+    return timestampDifference || left.id - right.id;
+  });
+}
+
+function formatChatMessageTime(dateValue?: string | null): string {
+  if (!dateValue) {
+    return "Just now";
+  }
+
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) {
+    return "Just now";
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatDate(dateValue?: string | null): string {
@@ -473,6 +512,80 @@ function renderStructuredNotes(text: string): React.ReactNode {
   );
 }
 
+function renderChatMessageContent(text: string): React.ReactNode {
+  const lines = text.split(/\r?\n/);
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+
+    elements.push(
+      <ul
+        key={`chat-list-${elements.length}`}
+        style={{
+          margin: 0,
+          paddingLeft: "1.25rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.45rem",
+        }}
+      >
+        {listItems.map((item, index) => (
+          <li key={`${item}-${index}`}>{renderInlineFormattedText(item)}</li>
+        ))}
+      </ul>,
+    );
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine) {
+      flushList();
+      return;
+    }
+
+    const headingMatch = trimmedLine.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushList();
+      elements.push(
+        <strong
+          key={`chat-heading-${elements.length}`}
+          style={{ display: "block", fontWeight: 800 }}
+        >
+          {renderInlineFormattedText(headingMatch[2].trim())}
+        </strong>,
+      );
+      return;
+    }
+
+    const bulletMatch = trimmedLine.match(/^[-*]\s+(.*)$/);
+    if (bulletMatch) {
+      listItems.push(bulletMatch[1].trim());
+      return;
+    }
+
+    flushList();
+    elements.push(
+      <p key={`chat-paragraph-${elements.length}`} style={{ margin: 0 }}>
+        {renderInlineFormattedText(trimmedLine)}
+      </p>,
+    );
+  });
+
+  flushList();
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+      {elements}
+    </div>
+  );
+}
+
 function getAccentColor(status?: string): string {
   switch (status?.toLowerCase()) {
     case "completed":
@@ -631,6 +744,9 @@ export default function LectureDetailPage({
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [pendingChatQuestion, setPendingChatQuestion] = useState<string | null>(
+    null,
+  );
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isTranscriptPlaying, setIsTranscriptPlaying] = useState(false);
   const [hasTranscriptPlaybackStarted, setHasTranscriptPlaybackStarted] =
@@ -668,6 +784,10 @@ export default function LectureDetailPage({
     displayAudioDuration > 0
       ? Math.min(100, (currentTranscriptTime / displayAudioDuration) * 100)
       : 0;
+  const canLoadLectureChat =
+    lecture?.id === Number(id) &&
+    lecture?.status?.toLowerCase() === "completed" &&
+    (Boolean(lecture.transcript) || Boolean(lecture.notes));
 
   useEffect(() => {
     let isActive = true;
@@ -696,18 +816,38 @@ export default function LectureDetailPage({
   }, [id]);
 
   useEffect(() => {
-    if (!lecture) return;
-
-    const status = lecture.status?.toLowerCase();
+    const status = lecture?.status?.toLowerCase();
     const isTerminal = ["completed", "failed", "canceled"].includes(status || "");
-    if (isTerminal) return;
+    if (!status || isTerminal) return;
+
+    let isActive = true;
+
+    const refreshPollingLecture = async () => {
+      try {
+        const { detail, lectureLogs } = await fetchLectureResources(id);
+        if (!isActive) return;
+
+        setLecture(detail);
+        setLogs(lectureLogs);
+        setLoadError(null);
+      } catch (err: unknown) {
+        if (!isActive) return;
+
+        setLoadError(
+          err instanceof Error ? err.message : "Failed to load lecture details.",
+        );
+      }
+    };
 
     const interval = window.setInterval(() => {
-      void refreshLecture();
+      void refreshPollingLecture();
     }, 3000);
 
-    return () => window.clearInterval(interval);
-  }, [lecture?.status]);
+    return () => {
+      isActive = false;
+      window.clearInterval(interval);
+    };
+  }, [id, lecture?.status]);
 
   useEffect(() => {
     setChatMessages([]);
@@ -716,10 +856,11 @@ export default function LectureDetailPage({
     setChatError(null);
     setChatDraft("");
     setChatSending(false);
+    setPendingChatQuestion(null);
   }, [id]);
 
   useEffect(() => {
-    if (activeTab !== "chatbot" || chatLoaded || chatLoading) {
+    if (!canLoadLectureChat || chatLoaded || chatLoading) {
       return;
     }
 
@@ -733,7 +874,9 @@ export default function LectureDetailPage({
           return;
         }
 
-        setChatMessages(messages);
+        setChatMessages((currentMessages) =>
+          mergeLectureChatMessages(currentMessages, messages),
+        );
         setChatError(null);
         setChatLoaded(true);
       } catch (err: unknown) {
@@ -746,6 +889,7 @@ export default function LectureDetailPage({
             ? err.message
             : "Failed to load lecture chatbot history.",
         );
+        setChatLoaded(true);
       } finally {
         if (isActive) {
           setChatLoading(false);
@@ -758,7 +902,7 @@ export default function LectureDetailPage({
     return () => {
       isActive = false;
     };
-  }, [activeTab, chatLoaded, chatLoading, id]);
+  }, [canLoadLectureChat, chatLoaded, chatLoading, id]);
 
   useEffect(() => {
     if (activeTab !== "chatbot") {
@@ -1061,12 +1205,15 @@ export default function LectureDetailPage({
   const chatbotAvailable =
     isLectureComplete &&
     (Boolean(lecture.transcript) || Boolean(lecture.notes));
-  const suggestedPrompts = [
-    "Sharax mowduucan si fudud oo kooban.",
-    "I sii 5 su'aalood oo imtixaan ah oo ku saabsan casharkan.",
-    "Waa maxay farqiga ugu muhiimsan ee fikradaha casharku sheegay?",
-  ];
-
+  const hasVisibleChat =
+    chatMessages.length > 0 || Boolean(pendingChatQuestion) || chatSending;
+  const chatHistoryStatus = chatLoading
+    ? "Checking saved history in the background..."
+    : chatMessages.length > 0
+      ? `${chatMessages.length} saved message${chatMessages.length === 1 ? "" : "s"} loaded`
+      : chatLoaded
+        ? "No previous conversations for this lecture."
+        : "Saved chat history will load automatically.";
   const refreshLecture = async () => {
     const { detail, lectureLogs } = await fetchLectureResources(id);
     setLecture(detail);
@@ -1141,7 +1288,9 @@ export default function LectureDetailPage({
     }
 
     setChatSending(true);
+    setPendingChatQuestion(trimmedDraft);
     setChatError(null);
+    setChatDraft("");
 
     try {
       const response = await fetch(apiUrl(`/api/v1/lectures/${id}/chat/ask`), {
@@ -1164,20 +1313,22 @@ export default function LectureDetailPage({
       }
 
       const payload = (await response.json()) as LectureChatAskResponse;
-      setChatMessages((currentMessages) => [
-        ...currentMessages,
-        payload.user_message,
-        payload.assistant_message,
-      ]);
+      setChatMessages((currentMessages) =>
+        mergeLectureChatMessages(currentMessages, [
+          payload.user_message,
+          payload.assistant_message,
+        ]),
+      );
       setChatLoaded(true);
-      setChatDraft("");
     } catch (err: unknown) {
       setChatError(
         err instanceof Error
           ? err.message
           : "Failed to get a response from the lecture chatbot.",
       );
+      setChatDraft(trimmedDraft);
     } finally {
+      setPendingChatQuestion(null);
       setChatSending(false);
     }
   };
@@ -1348,27 +1499,11 @@ export default function LectureDetailPage({
             marginTop: "0.5rem",
           }}
         >
-          <div style={{ display: "flex", gap: "1.25rem", alignItems: "center", opacity: 0.6 }}>
-             <button style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", padding: 0 }} aria-label="Add attachment">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-             </button>
-
-             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#fff", fontSize: "0.9rem", cursor: "pointer" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                <span>Fast</span>
-             </div>
-
-             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#fff", fontSize: "0.9rem", cursor: "pointer" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                <span>Gemma 2B</span>
-             </div>
+          <div style={{ color: "#fff", fontSize: "0.85rem", opacity: 0.62 }}>
+            {chatHistoryStatus}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-             <button style={{ background: "none", border: "none", color: "#fff", opacity: 0.6, cursor: "pointer" }} aria-label="Voice input">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-             </button>
-
              <button
                 type="button"
                 onClick={() => void handleAskChatbot()}
@@ -1390,10 +1525,7 @@ export default function LectureDetailPage({
                 {chatSending ? (
                    <span style={{ fontSize: "0.7rem" }}>...</span>
                 ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                    <polyline points="12 5 19 12 12 19"></polyline>
-                  </svg>
+                  <FaArrowRight aria-hidden="true" />
                 )}
               </button>
           </div>
@@ -1549,7 +1681,19 @@ export default function LectureDetailPage({
         ))}
       </div>
 
-      <div className="card">
+      <div
+        className={activeTab === "chatbot" ? undefined : "card"}
+        style={
+          activeTab === "chatbot"
+            ? {
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+                padding: 0,
+              }
+            : undefined
+        }
+      >
         {activeTab === "overview" && (
           <div>
             <h2 style={{ fontSize: "1.8rem", marginBottom: "0.5rem" }}>Lecture Overview</h2>
@@ -1961,29 +2105,38 @@ export default function LectureDetailPage({
                 <h2 style={{ fontSize: "1.5rem", fontWeight: 800, letterSpacing: "-0.01em" }}>
                   Somali Study Coach
                 </h2>
+                <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)", fontSize: "0.95rem" }}>
+                  {chatHistoryStatus}
+                </p>
               </div>
-              {chatMessages.length > 0 && (
+              {(chatLoaded || chatMessages.length > 0 || chatError) && (
                 <button
                   type="button"
                   style={{
-                    background: "none",
-                    border: "none",
+                    background: "transparent",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "8px",
+                    padding: "0.65rem 0.85rem",
                     color: "var(--primary-color)",
-                    fontWeight: 600,
-                    cursor: "pointer",
+                    fontWeight: 700,
+                    cursor: chatLoading ? "not-allowed" : "pointer",
                     fontSize: "0.95rem",
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.5rem"
+                    gap: "0.5rem",
+                    opacity: chatLoading ? 0.65 : 1,
                   }}
+                  disabled={chatLoading}
                   onClick={() => {
-                    setChatMessages([]);
+                    if (chatLoading) {
+                      return;
+                    }
                     setChatLoaded(false);
                     setChatError(null);
                   }}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>
-                  New Conversation
+                  <FaSyncAlt aria-hidden="true" />
+                  Refresh History
                 </button>
               )}
             </div>
@@ -2001,7 +2154,7 @@ export default function LectureDetailPage({
                   textAlign: "center"
                 }}
               >
-                <div style={{ fontSize: "3rem" }}>⏳</div>
+                <div style={{ fontSize: "3rem" }}>...</div>
                 <div style={{ maxWidth: "400px" }}>
                   <h3 style={{ marginBottom: "0.5rem" }}>Coach is getting ready...</h3>
                   <p style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
@@ -2010,7 +2163,7 @@ export default function LectureDetailPage({
                   </p>
                 </div>
               </div>
-            ) : (chatMessages.length === 0) ? (
+            ) : !hasVisibleChat ? (
               <div
                 style={{
                   flex: 1,
@@ -2022,11 +2175,6 @@ export default function LectureDetailPage({
                 }}
               >
                 {renderChatComposer(true)}
-                {chatLoading && (
-                  <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "1rem", opacity: 0.6 }}>
-                    Checking for previous conversations...
-                  </p>
-                )}
               </div>
             ) : (
 
@@ -2086,17 +2234,59 @@ export default function LectureDetailPage({
                               fontSize: "1.05rem",
                             }}
                           >
-                            <div style={{ whiteSpace: "pre-wrap" }}>
-                              {message.content}
-                            </div>
+                            {isUser ? (
+                              <div style={{ whiteSpace: "pre-wrap" }}>
+                                {message.content}
+                              </div>
+                            ) : (
+                              renderChatMessageContent(message.content)
+                            )}
                           </div>
                           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.4rem", padding: "0 0.5rem" }}>
-                            {isUser ? "Hadda" : "Coach"} • {formatDate(message.created_at).split(',')[1]?.trim() || "Just now"}
+                            {isUser ? "You" : "Coach"} - {formatChatMessageTime(message.created_at)}
                           </span>
                         </div>
                       </div>
                     );
                   })}
+
+                  {pendingChatQuestion && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        width: "100%",
+                      }}
+                    >
+                      <div
+                        style={{
+                          maxWidth: "85%",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: "1rem 1.25rem",
+                            borderRadius: "24px 24px 4px 24px",
+                            backgroundColor: "var(--primary-color)",
+                            color: "white",
+                            lineHeight: 1.7,
+                            fontSize: "1.05rem",
+                            opacity: 0.84,
+                          }}
+                        >
+                          <div style={{ whiteSpace: "pre-wrap" }}>
+                            {pendingChatQuestion}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.4rem", padding: "0 0.5rem" }}>
+                          You - Sending...
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {chatSending && (
                     <div style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -2127,10 +2317,10 @@ export default function LectureDetailPage({
                   style={{
                     position: "sticky",
                     bottom: 0,
-                    backgroundColor: "var(--secondary-bg)",
+                    backgroundColor: "transparent",
                     padding: "1rem 0",
-                    borderTop: "1px solid var(--border-color)",
-                    margin: "0 -1.5rem -1.5rem -1.5rem",
+                    borderTop: "none",
+                    margin: "0",
                     paddingBottom: "1.5rem"
                   }}
                 >

@@ -503,6 +503,7 @@ def execute_pipeline(db: Session, job: ProcessingJob, lecture_id: int):
                 "The Somali notes were generated, but the optional AI valuation step was unavailable."
             ),
             "genre_label": "Analysis unavailable",
+            "subject_category": "Other Subjects",
             "genre_explanation": (
                 "The provider could not complete the optional genre classification step."
             ),

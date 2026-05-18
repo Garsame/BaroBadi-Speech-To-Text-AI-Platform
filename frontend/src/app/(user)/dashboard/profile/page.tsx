@@ -15,6 +15,14 @@ interface ProfilePayload {
   password?: string;
 }
 
+function notifyUserProfileUpdated(profile: Partial<ProfileResponse>) {
+  window.dispatchEvent(
+    new CustomEvent("user-profile-updated", {
+      detail: profile,
+    }),
+  );
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -55,6 +63,12 @@ export default function UserProfilePage() {
           });
           
           if (!res.ok) throw new Error("Failed to update profile");
+          const data = (await res.json()) as ProfileResponse;
+          notifyUserProfileUpdated({
+              full_name: data.full_name || name,
+              email: data.email || email,
+              profile_picture_url: data.profile_picture_url ?? null,
+          });
           setMessage({ text: "Profile updated successfully!", type: "success" });
           setPassword("");
       } catch (err: unknown) {
@@ -88,6 +102,7 @@ export default function UserProfilePage() {
               const data = (await res.json()) as ProfileResponse;
               if (data.profile_picture_url) {
                   setProfilePic(apiUrl(data.profile_picture_url));
+                  notifyUserProfileUpdated(data);
                   setMessage({ text: "Image uploaded! (Note: Dev server auto-reloaded)", type: "success" });
               }
           } catch (err: unknown) {
@@ -110,6 +125,7 @@ export default function UserProfilePage() {
           });
           if (!res.ok) throw new Error("Failed to remove image");
           setProfilePic(null);
+          notifyUserProfileUpdated({ profile_picture_url: null });
           setMessage({ text: "Profile Image permanently deleted.", type: "success" });
       } catch (err: unknown) {
           const message = errorMessage(err, "Failed to remove image");

@@ -21,6 +21,7 @@ class LectureAnalysisPayload(BaseModel):
     confidence_label: str
     valuation_summary: str
     genre_label: str
+    subject_category: str = "Other Subjects"
     genre_explanation: str
 
 
@@ -76,10 +77,12 @@ Return strict JSON with exactly these keys:
 - confidence_label: short phrase such as "Strong alignment", "Moderate alignment", or "Needs improvement"
 - valuation_summary: 2 concise sentences explaining what the notes captured well and what may be missing or less precise
 - genre_label: a highly specific lecture genre such as "Python Programming", "Artificial Intelligence", "Business Strategy", "Organic Chemistry", "Public Speaking", or similar
+- subject_category: one broad library folder chosen from this exact list: "AI & Machine Learning", "Software Development", "Cloud & Infrastructure", "Business & Management", "Health & Medicine", "Science & Engineering", "Education & Learning", "Arts & Humanities", "Social Sciences", "Other Subjects"
 - genre_explanation: 2 to 3 sentences explaining why this exact genre fits based on the lecture title and content
 
 Guidelines:
 - Be specific with the genre; avoid broad labels like only "Educational" unless the content truly has no clearer topic.
+- Use subject_category for the broad Notes Library folder. Related subtopics must share the same folder: for example Human Physiology, Digestive System, Circulatory System, and Nutrition belong in "Health & Medicine"; Marketing, Accounting, Entrepreneurship, Operations, and Strategy belong in "Business & Management".
 - Use the transcript and notes together for the confidence score.
 - Keep the explanation professional and direct.
 - Do not include markdown in the JSON values.

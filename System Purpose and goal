@@ -1,0 +1,511 @@
+# SomaliNotes AI Lecture Learning Platform | A Unified AI Framework for Somali Lecture Transcription, Translation, and Note Generation
+
+## System Purpose, Goal, and Full Project Overview
+
+This document explains what this project is about, why it was built, what problem it solves, and how the system works from the frontend pages to the backend processing pipeline.
+
+The explanation is based on the current project files, folder structure, existing documentation, backend services, frontend pages, database models, and the AI prompt instructions embedded inside the code.
+
+---
+
+## Big Picture Purpose
+
+- This project is a full-stack AI learning platform that turns lecture videos into structured Somali study notes.
+- The main idea behind the system is to help Somali-speaking students learn from video lectures more easily.
+- Instead of forcing a student to manually watch, pause, write, translate, and summarize a long lecture, the system automates that process.
+- A user can submit a YouTube lecture link or upload a local lecture media file.
+- The backend processes the media, extracts or obtains the spoken content, creates a transcript, and then uses AI to generate Somali educational notes.
+- The final result is a learning dashboard where the student can read the transcript, study Somali notes, review summaries and key points, listen to notes, download notes, and ask a lecture chatbot questions and after all that he is examined with a quiz about the lecture.
+- The project is also designed with an admin side so system managers can monitor users, lectures, jobs, logs, and processing health.
+
+---
+
+## Main Goal of the System
+
+- The main goal is to convert educational lecture media into useful Somali learning materials.
+- The system aims to support students who understand Somali better than English or who want lecture content explained in Somali.
+- The platform reduces the time needed to prepare study notes from lectures.
+- It makes video-based learning easier to review, search, organize, and reuse.
+- It shows how AI can be applied in education, language support, speech-to-text processing, and student productivity.
+- It provides a practical final-year-project system that combines frontend design, backend APIs, authentication, database management, media processing, AI transcription, AI note generation, and admin monitoring.
+
+---
+
+## Problem the Project Solves
+
+- Many lectures are delivered as long videos, which are hard to revise from quickly.
+- Students often need written notes, summaries, and key points, but creating them manually takes time.
+- Somali-speaking learners may struggle when lecture content, transcripts, or explanations are mostly in English.
+- YouTube lectures and uploaded videos are not automatically organized into a personal study library.
+- Students may need to ask questions after a lecture, but they do not always have a tutor available.
+- Admins need visibility into whether lecture processing jobs are succeeding, failing, or getting stuck.
+
+This system solves these problems by automating lecture ingestion, transcription, Somali note generation, categorization, progress tracking, and lecture-based chatbot support.
+
+---
+
+## What the System Does
+
+- Allows public visitors to learn about the platform from the landing and about pages.
+- Allows students to sign up and sign in.
+- Allows admins to sign up or log in through admin-specific pages.
+- Gives each user a secure dashboard.
+- Lets users submit a new lecture in two ways:
+  - YouTube link.
+  - Uploaded video or audio file.
+- Automatically validates the lecture source.
+- Automatically creates a lecture record and a processing job.
+- Tracks lecture status:
+  - submitted.
+  - processing.
+  - completed.
+  - failed.
+  - canceled.
+- Tracks job progress through stages:
+  - validating input.
+  - preparing media.
+  - extracting audio.
+  - preparing audio.
+  - transcribing.
+  - cleaning transcript.
+  - generating notes.
+  - saving results.
+  - completed, failed, or canceled.
+- Downloads YouTube media when needed.
+- Checks YouTube captions first, so the system can use captions when available and avoid unnecessary transcription.
+- Uses FFmpeg to extract audio from uploaded or downloaded media.
+- Splits long audio into chunks so large lectures can be processed more reliably.
+- Uses Gemini AI models for transcription and lecture chat.
+- Uses Gemma or Gemini models for Somali note generation and fallback.
+- Generates:
+  - raw transcript.
+  - cleaned transcript.
+  - Somali summary.
+  - Somali key points.
+  - detailed Somali study notes in markdown.
+  - lecture confidence score.
+  - lecture genre label.
+  - subject category.
+  - processing logs.
+- Lets users open a detailed lecture page with:
+  - overview.
+  - transcript.
+  - Somali notes.
+  - lecture chatbot.
+  - processing timeline.
+- Lets users retry or cancel lecture processing when appropriate.
+- Lets users view a Notes Library grouped by AI-detected subject categories.
+- Lets users download notes as Word or PDF from the lecture detail page.
+- Lets users listen to generated Somali notes.
+- Lets admins view system-wide metrics, users, recent lectures, job outcomes, source mix, success rates, logs, and processing signals.
+
+---
+
+## The System Workflow
+
+- A user visits the public website.
+- The user signs up or signs in.
+- After authentication, the user enters the dashboard.
+- The user opens the "Add New Lecture" page.
+- The user chooses either a YouTube link or a local upload.
+- If the user submits a YouTube link:
+  - The backend validates that the URL is a YouTube URL.
+  - The backend tries to read the video title automatically.
+  - The backend may check YouTube captions before doing full transcription.
+- If the user uploads media:
+  - The backend validates the file type.
+  - The backend checks that the file extension is supported.
+  - The backend checks the file size limit.
+  - The backend saves the file under the uploads folder.
+- The backend creates a lecture record in the database.
+- The backend creates a processing job linked to that lecture.
+- The processing pipeline begins in the background.
+- The job status changes from pending to running.
+- The lecture status changes from submitted to processing.
+- The pipeline prepares the media.
+- If captions are available from YouTube, the system can use them as the transcript source.
+- If captions are not available, the system extracts audio using FFmpeg.
+- Long audio is split into smaller chunks.
+- Each chunk is transcribed using the configured Gemini transcription model.
+- The raw transcript parts are joined into one transcript.
+- The transcript is cleaned.
+- The note generation service sends the transcript to the AI model.
+- The AI model returns structured Somali notes, a summary, and key points.
+- The system validates the generated notes for quality.
+- If the generated notes are too short, too English-heavy, malformed, or missing important structure, the system asks the AI model to repair them.
+- The lecture analysis service evaluates how well the notes match the transcript.
+- The analysis service assigns confidence, genre, and subject category.
+- The transcript, notes, metadata, media information, and logs are saved.
+- The job becomes successful.
+- The lecture becomes completed.
+- The frontend dashboard updates the user every few seconds so the user can see progress.
+- The user opens the lecture detail page to study the generated material.
+
+---
+
+## Main Users of the System
+
+### Student or Learner
+
+- Signs up and logs in.
+- Uploads lecture videos or submits YouTube lecture links.
+- Watches lecture processing progress.
+- Views completed lecture notes.
+- Reads the transcript and Somali notes.
+- Uses the Notes Library to find generated notes by subject.
+- Uses the lecture chatbot to ask questions about a completed lecture.
+- Updates profile information and avatar.
+
+### Administrator
+
+- Logs in through the admin portal.
+- Views platform statistics.
+- Monitors total users, active users, lectures, notes, jobs, success rates, and failed jobs.
+- Reviews recent lectures submitted by all users.
+- Reviews system logs and activity logs.
+- Creates, updates, activates, deactivates, or deletes users.
+- Monitors operational health of the lecture processing pipeline.
+
+---
+
+## Frontend Overview
+
+- The frontend is built with Next.js, React, and TypeScript.
+- It uses the Next.js App Router structure.
+- The public pages explain the platform and guide users to sign up or sign in.
+- The user dashboard contains the learning workflow.
+- The admin dashboard contains management and monitoring tools.
+
+Important frontend areas:
+
+- `frontend/src/app/(public)`:
+  - Landing page.
+  - About page.
+  - Sign in page.
+  - Sign up page.
+- `frontend/src/app/(user)/dashboard`:
+  - Main student dashboard.
+  - My Lectures page.
+  - New Lecture page.
+  - Lecture detail page.
+  - Notes Library page.
+  - Profile page.
+- `frontend/src/app/(admin)/admin`:
+  - Admin dashboard.
+  - User management.
+  - Lecture monitoring.
+  - Job monitoring.
+  - Logs.
+  - Settings.
+  - Admin profile.
+
+The frontend communicates with the backend using API helper functions from `frontend/src/lib/api.ts` and stores authentication session data with `frontend/src/lib/session.ts`.
+
+---
+
+## Backend Overview
+
+- The backend is built with FastAPI and Python.
+- It exposes REST API endpoints under `/api/v1`.
+- It handles authentication, lecture submission, file uploads, media streaming, lecture details, logs, chat, and admin operations.
+- It uses SQLAlchemy models for database tables.
+- It uses Alembic migrations to manage database schema changes.
+- It uses SQLite for local development storage.
+- It supports Celery background jobs, with SQLite broker/backend defaults for easier local Windows development.
+
+Important backend areas:
+
+- `backend/app/main.py`:
+  - Creates the FastAPI app.
+  - Adds CORS support for the frontend.
+  - Includes auth, lecture, and admin routers.
+  - Serves uploaded files.
+  - Adds request logging.
+- `backend/app/api/routers/auth.py`:
+  - User signup.
+  - User login.
+  - Admin signup.
+  - Current user profile.
+  - Profile updates.
+  - Avatar upload and delete.
+  - User activity.
+- `backend/app/api/routers/lectures.py`:
+  - Create lecture from YouTube.
+  - Upload lecture media.
+  - List user lectures.
+  - Read lecture details.
+  - Serve local lecture media.
+  - Retry lecture processing.
+  - Cancel lecture processing.
+  - Read lecture logs.
+  - Read and send lecture chatbot messages.
+  - Read Notes Library data.
+- `backend/app/api/routers/admin.py`:
+  - Admin dashboard statistics.
+  - Recent lectures.
+  - System logs.
+  - User creation.
+  - User listing.
+  - User editing.
+  - User deletion.
+  - Admin profile updates.
+- `backend/app/jobs/pipeline.py`:
+  - Main lecture processing stages.
+  - Media preparation.
+  - Audio extraction.
+  - Transcription.
+  - Somali note generation.
+  - Lecture analysis.
+  - Saving results.
+  - Logging.
+  - Cancellation checks.
+- `backend/app/jobs/worker.py`:
+  - Celery task version of the pipeline.
+  - FastAPI background task fallback version.
+  - Job status updates.
+  - Error handling.
+- `backend/app/services`:
+  - Business logic for authentication, YouTube handling, media processing, transcription, note generation, analysis, chat, and lecture operations.
+
+---
+
+## Database and Stored Data
+
+The system stores important data in database tables represented by SQLAlchemy models.
+
+- `users`:
+  - Account information.
+  - Email.
+  - Hashed password.
+  - Full name.
+  - Role.
+  - Profile picture.
+  - Active status.
+- `lectures`:
+  - Lecture title.
+  - Source type.
+  - Source URL or file path.
+  - Processing status.
+  - Owner user.
+  - Creation and update timestamps.
+- `processing_jobs`:
+  - Background task ID.
+  - Job status.
+  - Current stage.
+  - Progress percent.
+  - Error message.
+  - Start and completion timestamps.
+- `media_assets`:
+  - Stored media path.
+  - Media type.
+  - Duration.
+  - File size.
+- `transcripts`:
+  - Raw transcript.
+  - Cleaned transcript.
+  - Metadata such as transcript source, note generation metadata, and AI analysis.
+- `notes`:
+  - Structured Somali notes.
+  - Summary.
+  - Key points.
+- `lecture_chat_messages`:
+  - User and assistant chat history for each lecture.
+- `activity_logs`:
+  - User login and signup events.
+- `system_logs`:
+  - System events, pipeline progress, warnings, and errors.
+
+---
+
+## AI Logic and Prompt Intention Behind the Project
+
+The code contains several AI prompts that explain the deeper purpose of the system.
+
+### Transcription Prompt Intention
+
+- The transcription service asks the AI model to create a plain text transcript of spoken audio.
+- It specifically avoids summarizing or adding commentary at this stage.
+- The goal is to preserve the lecture content before transforming it into notes.
+
+### Somali Note Generation Prompt Intention
+
+- The note generation service acts like a senior Somali academic note writer, translator, and curriculum designer.
+- Its purpose is not only to translate words, but to create useful study material.
+- It asks for:
+  - detailed Somali notes.
+  - a short Somali summary.
+  - five to eight key learning points.
+- The notes must be formal, natural, student-friendly Somali.
+- The system allows important technical terms such as Python, API, SQL, AI, AWS, IaaS, PaaS, and SaaS to remain in English only when needed.
+- The AI must remove copied transcript noise, strange symbols, bad markdown, and unnecessary English sentences.
+- The structured notes should contain clear Somali headings and readable markdown.
+- The note generation process includes guardrails so the output is checked before being saved.
+
+### Repair Prompt Intention
+
+- If the generated notes do not satisfy quality checks, the repair prompt treats the AI as a strict Somali academic editor.
+- It asks the model to rewrite English-heavy, short, broken, or malformed notes into better Somali study notes.
+- This makes the system more reliable for students because it does not blindly accept weak AI output.
+
+### Lecture Analysis Prompt Intention
+
+- The lecture analysis service checks how well the generated notes match the transcript.
+- It returns a confidence score from 0 to 100.
+- It gives a confidence label such as strong alignment or moderate alignment.
+- It identifies the lecture genre as specifically as possible.
+- It assigns a broad subject category, such as:
+  - AI & Machine Learning.
+  - Software Development.
+  - Cloud & Infrastructure.
+  - Business & Management.
+  - Health & Medicine.
+  - Science & Engineering.
+  - Education & Learning.
+  - Arts & Humanities.
+  - Social Sciences.
+  - Other Subjects.
+- This analysis supports the Notes Library and helps students understand what type of lecture they studied.
+
+### Lecture Chatbot Prompt Intention
+
+- The chatbot is designed as a study tutor inside the lecture-learning app.
+- It must answer questions using only the lecture transcript, generated Somali notes, and recent chat history.
+- It should not invent unsupported facts.
+- It should respond in the same language as the student when possible, and prefer Somali if unclear.
+- It helps the student revise and understand a specific lecture after processing is complete.
+
+---
+
+## Processing Pipeline Details
+
+- The pipeline starts after a lecture is created.
+- It uses clear stages so users and admins can see what is happening.
+- It validates input before doing expensive work.
+- It prepares source media from YouTube or upload.
+- It downloads YouTube media for playback when needed.
+- It checks captions first for YouTube videos because captions can save processing time.
+- It extracts audio using FFmpeg when the system needs speech-to-text processing.
+- It converts audio to a standard speech-friendly format.
+- It splits long audio into chunks to avoid model and timeout limitations.
+- It can process chunks in parallel.
+- It has retry handling for temporary AI provider errors.
+- It has fallback logic for difficult transcription cases.
+- It records progress percent while the job is running.
+- It writes logs for important events, warnings, and failures.
+- It supports cancellation if the user cancels before processing completes.
+- It saves successful results as transcript, notes, media metadata, and AI analysis.
+
+---
+
+## Authentication and Roles
+
+- The system uses JWT bearer tokens for authentication.
+- Passwords are hashed before storage.
+- There are different user roles:
+  - guest.
+  - user.
+  - admin.
+- Normal users can manage their own lectures and profile.
+- Admin users can manage broader system data and platform users.
+- Protected backend dependencies ensure only authenticated users or admins can access sensitive routes.
+
+---
+
+## Admin Purpose
+
+The admin side exists because AI processing systems need monitoring.
+
+- Admins can see whether the platform is working correctly.
+- Admins can view total users, active users, learners, admins, lectures, notes, and jobs.
+- Admins can see how many lectures are completed, failed, processing, submitted, or canceled.
+- Admins can compare YouTube lectures and uploaded lectures.
+- Admins can see job success rate and note conversion rate.
+- Admins can inspect recent lectures with owner information.
+- Admins can review logs to understand user activity and lecture generation events.
+- Admins can manage user accounts.
+
+---
+
+## Notes Library Purpose
+
+- The Notes Library organizes completed lecture notes.
+- It groups generated notes by AI-detected subject category.
+- It helps students build a reusable personal learning library.
+- It makes generated notes easier to find after many lectures have been processed.
+- It shows confidence score and summary information so students can quickly judge note quality.
+
+---
+
+## Lecture Detail Page Purpose
+
+The lecture detail page is the main study screen after processing.
+
+- It shows the lecture overview.
+- It shows generated transcript text.
+- It shows Somali study notes.
+- It shows summary and key points.
+- It includes a Somali Study Coach chatbot.
+- It shows processing logs and timeline.
+- It can play local lecture media when available.
+- It supports listening to the generated Somali notes.
+- It supports downloading notes as Word or PDF.
+
+---
+
+## Technology Stack
+
+- Frontend:
+  - Next.js.
+  - React.
+  - TypeScript.
+  - React Icons.
+  - HTML to PDF support.
+- Backend:
+  - FastAPI.
+  - Python.
+  - SQLAlchemy.
+  - Pydantic.
+  - Alembic.
+  - Celery.
+  - SQLite for local development.
+- Media and AI:
+  - FFmpeg for audio extraction and splitting.
+  - yt-dlp for YouTube metadata, captions, and media download.
+  - Google Gemini and Gemma models for transcription, note generation, lecture analysis, and chatbot support.
+- Security:
+  - JWT authentication.
+  - Hashed passwords.
+  - Role-based access.
+
+---
+
+## Why This Project Is Useful
+
+- It supports Somali-language education.
+- It helps students revise lectures faster.
+- It turns passive video content into active learning material.
+- It gives students summaries, key points, detailed notes, and a tutor-like chatbot.
+- It helps users keep all generated notes in one organized place.
+- It shows a real-world use of AI in education.
+- It demonstrates integration of frontend, backend, database, background jobs, media processing, and AI services.
+- It gives admins tools to monitor and manage the system instead of leaving processing hidden.
+
+---
+
+## Final System Aim
+
+- The final aim of the system is to become an intelligent Somali lecture assistant.
+- A student should be able to give the system a lecture and receive study-ready Somali materials.
+- The system should make learning more accessible, faster, better organized, and easier to review.
+- The project is not just speech-to-text; it is a complete lecture-to-learning-material platform.
+- Its value is in the full chain:
+  - receive lecture.
+  - process media.
+  - transcribe speech.
+  - generate Somali notes.
+  - validate quality.
+  - classify the topic.
+  - store results.
+  - help the student study through dashboards and chatbot support.
+
+In short, this project is an AI-powered educational platform designed to transform lecture videos into Somali study knowledge.

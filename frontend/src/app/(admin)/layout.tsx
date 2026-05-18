@@ -14,7 +14,7 @@ import { MdDashboard, MdPeople, MdOutlineOndemandVideo, MdLibraryBooks, MdAddCir
 import { FaCheckCircle, FaRocket, FaExclamationTriangle, FaYoutube, FaFileAudio, FaTools } from 'react-icons/fa';
 
 interface SystemNotification {
-  id: number;
+  id: string;
   level: string;
   message: string;
   created_at: string;

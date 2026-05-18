@@ -2,7 +2,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from jose import JWTError, jwt
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Any
 import shutil
 import os
@@ -12,7 +12,7 @@ from app.core.config import BACKEND_ROOT, settings
 from app.core.database import get_db
 from app.models.log import SystemLog
 from app.models.user import User
-from app.models.lecture import Lecture as ModelLecture
+from app.models.lecture import Lecture as ModelLecture, LectureStatus
 from app.schemas.chat import (
     LectureChatAskRequest,
     LectureChatAskResponse,
@@ -28,6 +28,205 @@ router = APIRouter()
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+SUBJECT_CATEGORY_RULES = [
+    (
+        "AI & Machine Learning",
+        [
+            "ai",
+            "artificial intelligence",
+            "machine learning",
+            "deep learning",
+            "neural",
+            "llm",
+            "large language",
+            "language model",
+            "prompt",
+            "transformer",
+            "generative",
+        ],
+    ),
+    (
+        "Software Development",
+        [
+            "software",
+            "programming",
+            "coding",
+            "developer",
+            "web development",
+            "full-stack",
+            "frontend",
+            "backend",
+            "react",
+            "javascript",
+            "typescript",
+            "python",
+        ],
+    ),
+    (
+        "Cloud & Infrastructure",
+        [
+            "cloud",
+            "infrastructure",
+            "devops",
+            "network",
+            "server",
+            "database",
+            "security",
+            "cybersecurity",
+            "aws",
+            "azure",
+            "docker",
+            "kubernetes",
+        ],
+    ),
+    (
+        "Business & Management",
+        [
+            "business",
+            "management",
+            "marketing",
+            "finance",
+            "accounting",
+            "economics",
+            "strategy",
+            "startup",
+            "entrepreneur",
+            "entrepreneurship",
+            "sales",
+            "leadership",
+            "operations",
+            "supply chain",
+            "logistics",
+            "human resources",
+            "hr",
+            "corporate",
+            "governance",
+            "investment",
+            "banking",
+            "product management",
+            "project management",
+            "market",
+            "pricing",
+            "revenue",
+            "profit",
+        ],
+    ),
+    (
+        "Health & Medicine",
+        [
+            "health",
+            "medical",
+            "medicine",
+            "biology",
+            "anatomy",
+            "physiology",
+            "human body",
+            "digestive",
+            "digestion",
+            "circulatory",
+            "blood",
+            "heart",
+            "cardiac",
+            "cardiovascular",
+            "respiratory",
+            "lung",
+            "nervous",
+            "brain",
+            "skeletal",
+            "muscular",
+            "endocrine",
+            "immune",
+            "nutrition",
+            "disease",
+            "clinical",
+            "patient",
+            "nursing",
+            "public health",
+            "mental health",
+        ],
+    ),
+    (
+        "Science & Engineering",
+        [
+            "science",
+            "engineering",
+            "physics",
+            "chemistry",
+            "mathematics",
+            "math",
+            "robotics",
+            "electronics",
+        ],
+    ),
+    (
+        "Education & Learning",
+        [
+            "education",
+            "teaching",
+            "learning",
+            "study",
+            "curriculum",
+            "roadmap",
+            "training",
+        ],
+    ),
+    (
+        "Arts & Humanities",
+        [
+            "art",
+            "design",
+            "history",
+            "literature",
+            "language",
+            "philosophy",
+            "religion",
+            "culture",
+            "music",
+        ],
+    ),
+    (
+        "Social Sciences",
+        [
+            "psychology",
+            "sociology",
+            "politics",
+            "political",
+            "law",
+            "anthropology",
+            "communication",
+        ],
+    ),
+]
+
+
+def _keyword_matches(text: str, keyword: str) -> bool:
+    import re
+
+    return re.search(rf"\b{re.escape(keyword)}\b", text, re.IGNORECASE) is not None
+
+
+def _resolve_subject_category(
+    subject_category: str | None,
+    genre_label: str | None,
+    title: str | None,
+) -> str:
+    clean_category = (subject_category or "").strip()
+    known_categories = {category for category, _keywords in SUBJECT_CATEGORY_RULES}
+    known_categories.add("Other Subjects")
+    if clean_category in known_categories and clean_category != "Other Subjects":
+        return clean_category
+
+    clean_genre = (genre_label or "").strip()
+    clean_title = (title or "").strip()
+    for source_text in (clean_genre, clean_title):
+        if not source_text:
+            continue
+        for category, keywords in SUBJECT_CATEGORY_RULES:
+            if any(_keyword_matches(source_text, keyword) for keyword in keywords):
+                return category
+
+    return clean_category or (clean_genre if clean_genre and clean_genre != "Uncategorized" else "Other Subjects")
 
 
 def _get_user_from_media_token(db: Session, token: str | None) -> User:
@@ -200,6 +399,71 @@ def read_lectures(
     """Retrieve lectures for current user."""
     lecture_service = LectureService(db)
     return lecture_service.get_lectures_by_user(owner_id=current_user.id)
+
+
+@router.get("/notes-library")
+def read_notes_library(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Return generated notes grouped by the AI genre metadata on the frontend."""
+    lectures = (
+        db.query(ModelLecture)
+        .options(
+            joinedload(ModelLecture.notes),
+            joinedload(ModelLecture.transcript),
+            joinedload(ModelLecture.job),
+        )
+        .filter(
+            ModelLecture.owner_id == current_user.id,
+            ModelLecture.status == LectureStatus.completed,
+        )
+        .order_by(ModelLecture.updated_at.desc())
+        .all()
+    )
+
+    result = []
+    for lecture in lectures:
+        if not lecture.notes:
+            continue
+
+        transcript_metadata = (
+            lecture.transcript.metadata_json
+            if lecture.transcript and isinstance(lecture.transcript.metadata_json, dict)
+            else {}
+        )
+        analysis = transcript_metadata.get("analysis") if isinstance(transcript_metadata, dict) else {}
+        if not isinstance(analysis, dict):
+            analysis = {}
+
+        genre_label = analysis.get("genre_label") or "Uncategorized"
+        subject_category = _resolve_subject_category(
+            analysis.get("subject_category"),
+            genre_label,
+            lecture.title,
+        )
+
+        result.append(
+            {
+                "id": lecture.id,
+                "title": lecture.title,
+                "source_type": lecture.source_type,
+                "status": lecture.status.value if hasattr(lecture.status, "value") else str(lecture.status),
+                "created_at": lecture.created_at,
+                "updated_at": lecture.updated_at,
+                "completed_at": lecture.job.completed_at if lecture.job else None,
+                "genre_label": genre_label,
+                "subject_category": subject_category,
+                "genre_explanation": analysis.get("genre_explanation"),
+                "confidence_score": analysis.get("confidence_score"),
+                "confidence_label": analysis.get("confidence_label"),
+                "summary": lecture.notes.summary,
+                "key_points": lecture.notes.key_points or [],
+            }
+        )
+
+    return result
+
 
 @router.get("/{lecture_id}", response_model=LectureDetail)
 def read_lecture(
