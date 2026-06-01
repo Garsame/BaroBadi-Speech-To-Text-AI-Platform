@@ -1,0 +1,5 @@
+temp_youtube/*
+temp_youtube_transcripts/*
+temp_media/*
+*.err.log
+*.log

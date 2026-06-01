@@ -35,3 +35,6 @@ class Lecture(Base):
         cascade="all, delete-orphan",
         order_by="LectureChatMessage.created_at",
     )
+    quiz = relationship("Quiz", back_populates="lecture", uselist=False, cascade="all, delete-orphan")
+    quiz_attempts = relationship("QuizAttempt", back_populates="lecture", cascade="all, delete-orphan")
+

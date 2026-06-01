@@ -11,6 +11,8 @@ STAGE_LABELS = {
     "transcribing": "Audio transcription",
     "cleaning_transcript": "Transcript cleanup",
     "generating_notes": "Somali note generation",
+    "generating_quiz": "AI quiz generation",
+
     "lecture_analysis": "AI lecture analysis",
     "lecture_chat": "Lecture chatbot",
     "saving_results": "Saving lecture results",

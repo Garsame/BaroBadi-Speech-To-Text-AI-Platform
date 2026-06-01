@@ -64,6 +64,17 @@ def process_lecture_pipeline(self, lecture_id: int):
         job.completed_at = datetime.utcnow()
         if lecture:
             lecture.status = LectureStatus.completed
+            from app.models.log import ActivityLog
+            db.add(
+                ActivityLog(
+                    action="LECTURE_COMPLETED",
+                    user_id=lecture.owner_id,
+                    details={
+                        "lecture_id": lecture.id,
+                        "title": lecture.title,
+                    }
+                )
+            )
         db.commit()
         create_system_log(db, "INFO", "Lecture job finished.", lecture_id)
     except LectureProcessingCanceled:
@@ -107,6 +118,18 @@ def process_lecture_pipeline(self, lecture_id: int):
         job.error_message = sanitize_terminal_text(format_exception_for_user(e, failed_stage))
         if lecture:
             lecture.status = LectureStatus.failed
+            from app.models.log import ActivityLog
+            db.add(
+                ActivityLog(
+                    action="LECTURE_FAILED",
+                    user_id=lecture.owner_id,
+                    details={
+                        "lecture_id": lecture.id,
+                        "title": lecture.title,
+                        "error_stage": str(failed_stage),
+                    }
+                )
+            )
         db.commit()
         create_system_log(
             db,
@@ -160,6 +183,17 @@ def process_lecture_pipeline_sync(lecture_id: int):
         job.completed_at = datetime.utcnow()
         if lecture:
             lecture.status = LectureStatus.completed
+            from app.models.log import ActivityLog
+            db.add(
+                ActivityLog(
+                    action="LECTURE_COMPLETED",
+                    user_id=lecture.owner_id,
+                    details={
+                        "lecture_id": lecture.id,
+                        "title": lecture.title,
+                    }
+                )
+            )
         db.commit()
         create_system_log(db, "INFO", "Lecture job finished.", lecture_id)
     except LectureProcessingCanceled:
@@ -203,6 +237,18 @@ def process_lecture_pipeline_sync(lecture_id: int):
         job.error_message = sanitize_terminal_text(format_exception_for_user(e, failed_stage))
         if lecture:
             lecture.status = LectureStatus.failed
+            from app.models.log import ActivityLog
+            db.add(
+                ActivityLog(
+                    action="LECTURE_FAILED",
+                    user_id=lecture.owner_id,
+                    details={
+                        "lecture_id": lecture.id,
+                        "title": lecture.title,
+                        "error_stage": str(failed_stage),
+                    }
+                )
+            )
         db.commit()
         create_system_log(
             db,

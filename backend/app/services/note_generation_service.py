@@ -25,6 +25,8 @@ class SomaliNotesPayload(BaseModel):
     structured_content: str
     summary: str
     key_points: list[str]
+    glossary: list[str]
+    revision_questions: list[str]
 
 
 class TranscriptChunkDigestPayload(BaseModel):
@@ -33,7 +35,7 @@ class TranscriptChunkDigestPayload(BaseModel):
 
 
 class NoteGenerationService:
-    MAX_TRANSCRIPT_CHUNKS = 8
+    MAX_TRANSCRIPT_CHUNKS = 12
     MAX_REPAIR_ATTEMPTS = 2
 
     TEXT_REPLACEMENTS = {
@@ -383,34 +385,40 @@ class NoteGenerationService:
     def _normalize_payload(self, payload: dict[str, Any]) -> dict[str, str | list[str]]:
         structured_content = self._normalize_text(str(payload.get("structured_content", "")))
         summary = self._normalize_text(str(payload.get("summary", "")))
-        raw_key_points = payload.get("key_points", [])
 
-        if not isinstance(raw_key_points, list):
-            raw_key_points = [
-                part
-                for part in re.split(r"\n+", str(raw_key_points))
-                if str(part).strip()
-            ]
+        def normalize_string_list(raw_items: Any) -> list[str]:
+            if not isinstance(raw_items, list):
+                raw_items = [
+                    part
+                    for part in re.split(r"\n+", str(raw_items))
+                    if str(part).strip()
+                ]
 
-        cleaned_key_points: list[str] = []
-        seen_key_points: set[str] = set()
-        for item in raw_key_points:
-            cleaned_item = self._normalize_text(str(item))
-            cleaned_item = re.sub("^[-*\\u2022]\\s+", "", cleaned_item).strip()
-            if not cleaned_item:
-                continue
+            cleaned_items: list[str] = []
+            seen_items: set[str] = set()
+            for item in raw_items:
+                cleaned_item = self._normalize_text(str(item))
+                cleaned_item = re.sub("^[-*\\u2022]\\s+", "", cleaned_item).strip()
+                if not cleaned_item:
+                    continue
 
-            dedupe_key = cleaned_item.casefold()
-            if dedupe_key in seen_key_points:
-                continue
+                dedupe_key = cleaned_item.casefold()
+                if dedupe_key in seen_items:
+                    continue
 
-            seen_key_points.add(dedupe_key)
-            cleaned_key_points.append(cleaned_item)
+                seen_items.add(dedupe_key)
+                cleaned_items.append(cleaned_item)
+
+            return cleaned_items
 
         return {
             "structured_content": structured_content,
             "summary": summary,
-            "key_points": cleaned_key_points,
+            "key_points": normalize_string_list(payload.get("key_points", [])),
+            "glossary": normalize_string_list(payload.get("glossary", [])),
+            "revision_questions": normalize_string_list(
+                payload.get("revision_questions", [])
+            ),
         }
 
     def _generate_content_with_fallback(self, prompt: str, response_schema: type[BaseModel]):
@@ -545,8 +553,16 @@ class NoteGenerationService:
         structured_content = str(payload.get("structured_content", "")).strip()
         summary = str(payload.get("summary", "")).strip()
         key_points = payload.get("key_points", [])
+        glossary = payload.get("glossary", [])
+        revision_questions = payload.get("revision_questions", [])
         full_text = "\n".join(
-            [summary, structured_content, *[str(point) for point in key_points or []]]
+            [
+                summary,
+                structured_content,
+                *[str(point) for point in key_points or []],
+                *[str(entry) for entry in glossary or []],
+                *[str(question) for question in revision_questions or []],
+            ]
         )
 
         if not structured_content:
@@ -555,11 +571,15 @@ class NoteGenerationService:
             issues.append("Somali summary is empty.")
         if not key_points:
             issues.append("Key points list is empty.")
+        if not glossary:
+            issues.append("Glossary list is empty.")
+        if not revision_questions:
+            issues.append("Revision questions list is empty.")
 
         transcript_word_count = len(re.findall(r"[A-Za-z']+", transcript_text))
         summary_word_count = len(re.findall(r"[A-Za-z']+", summary))
         structured_word_count = len(re.findall(r"[A-Za-z']+", structured_content))
-        minimum_structured_words = min(450, max(140, transcript_word_count // 5))
+        minimum_structured_words = min(2500, max(650, transcript_word_count // 8))
 
         if summary and summary_word_count < 18:
             issues.append("Summary is too short and not descriptive enough.")
@@ -569,8 +589,8 @@ class NoteGenerationService:
             issues.append("Detailed notes need at least two clear Somali section headings.")
 
         if isinstance(key_points, list):
-            if len(key_points) < 5:
-                issues.append("Key points should contain at least five useful Somali points.")
+            if len(key_points) < 12:
+                issues.append("Key points should contain at least twelve useful Somali points.")
             short_points = [
                 point
                 for point in key_points
@@ -578,6 +598,10 @@ class NoteGenerationService:
             ]
             if len(short_points) > 1:
                 issues.append("Several key points are too short to be useful.")
+        if isinstance(glossary, list) and len(glossary) < 5:
+            issues.append("Glossary should contain at least five useful Somali definitions.")
+        if isinstance(revision_questions, list) and len(revision_questions) < 5:
+            issues.append("Revision questions should contain at least five useful questions.")
 
         foreign_scripts = self._find_foreign_scripts(full_text)
         if foreign_scripts:
@@ -603,23 +627,18 @@ class NoteGenerationService:
 
         return issues
 
-    def _build_chunk_digest_prompt(
-        self,
-        transcript_chunk: str,
-        chunk_index: int,
-        total_chunks: int,
-    ) -> str:
-        return f"""Waxaad diyaarinaysaa xog kooban oo laga sameyn doono Somali study notes dambe.
+    def _build_chunk_digest_prompt(self, transcript_chunk, chunk_index, total_chunks):
+        return f"""Waxaad diyaarinaysaa xog faahfaahsan oo laga sameyn doono Somali study notes dambe.
 Soo koob qaybta {chunk_index} ee {total_chunks} ee transcript-ka.
-
 Soo celi strict JSON oo leh:
-- chunk_summary: 2 ilaa 4 weedhood oo Somali rasmi ah
-- key_points: 4 ilaa 6 qodob oo Somali ah oo ah JSON list
+- chunk_summary: 6 ilaa 10 weedhood oo Somali rasmi ah oo sharaxaya fikradaha ugu muhiimsan ee qaybtan si faahfaahsan
+- key_points: 8 ilaa 12 qodob oo Somali ah oo faahfaahsan, mid kasta oo sharaxaya fikrad gaar ah oo ka timid qaybtan
 
 Xeerar:
-- Ha ku qorin faahfaahin Ingiriisi ah oo dhamaystiran marka aan loo baahnayn.
-- Haddii eray farsamo muhiim yahay, sharax Somali ahaan oo hay magaca gaaban ee Ingiriisiga haddii loo baahdo.
-- Ka dhig xogta mid kooban laakiin ilaalisa fikradaha ugu muhiimsan ee qaybtan.
+- Ha gaabinin — qaybtani waxay ka mid tahay muhadaro dheer, markaa ilaaliso DHAMMAAN fikradaha muhiimsan.
+- Haddii eray farsamo muhiim yahay, marka hore sharax Somali ahaan, ka dibna ku qor magaca Ingiriisiga xiga xagga midig ee jaantusyada.
+- Qor si faahfaahsan — ardayga waa inuu fahmi karaa qaybtan oo kaliya adiga oo u sharaxaya.
+- Ku dar tusaalooyin haddii transcript-ku leeyahay.
 
 Transcript chunk:
 {transcript_chunk}
@@ -639,8 +658,6 @@ Transcript chunk:
                 "source_strategy": "single_pass",
                 "source_chunks": max(1, len(chunks)),
             }
-
-        from threading import Lock
 
         condensed_sections: list[str | None] = [None] * len(chunks)
 
@@ -665,7 +682,7 @@ Transcript chunk:
                 logger.error(f"Error digesting chunk {index}: {exc}")
                 return f"### Qaybta {index}\n[Error summary generation failed for this part]"
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chunks), 8)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(chunks), 16)) as executor:
             future_to_index = {
                 executor.submit(process_chunk_digest, i, chunk): i
                 for i, chunk in enumerate(chunks, start=1)
@@ -679,27 +696,30 @@ Transcript chunk:
             "source_chunks": len(chunks),
         }
 
-    def _build_generation_prompt(self, source_material: str) -> str:
+    def _build_generation_prompt(self, source_material):
         return f"""You are a senior Somali academic note writer, translator, and curriculum designer.
-Turn the lecture source material into polished Somali study notes for students.
+Your job is to convert the full lecture source material into comprehensive, detailed Somali study notes.
+This lecture is long (potentially 1–2 hours). You MUST cover the ENTIRE content — do not skip, compress, or summarize away any topic, concept, or section from the source material.
 
 Return strict JSON with exactly these keys:
-- structured_content: detailed Somali notes in clean markdown
-- summary: 2 to 4 formal Somali sentences
-- key_points: 5 to 8 Somali bullet ideas as a JSON list of strings
+- structured_content: comprehensive Somali notes in clean markdown covering EVERY topic in the lecture
+- summary: 4 to 6 formal Somali sentences covering the full scope of the lecture
+- key_points: 15 to 25 Somali bullet ideas as a JSON list of strings, one per major concept
+- glossary: 8 to 15 entries as a JSON list of strings, each in format "Magaca Ereyga: sharaxaad Somali ah (English term)"
+- revision_questions: 8 to 12 Somali revision questions as a JSON list of strings that test understanding of the lecture
 
-Non-negotiable rules:
+Non-negotiable language rules:
 - All explanatory prose must be in natural, formal Somali.
 - Do not leave full headings, full sentences, or bullet items in English.
-- Only keep proper nouns, product names, programming languages, and short acronyms in English when necessary, such as Python, AWS, API, SQL, AI, IaaS, PaaS, or SaaS.
-- When a technical English term is important, explain it in Somali first and, if truly needed, place the English term in parentheses only once.
-- Remove corruption, strange symbols, foreign scripts, placeholder text, and copied transcript noise.
+- Only keep proper nouns, product names, programming languages, and short acronyms in English when necessary (e.g. Python, AWS, API, SQL, AI, IaaS, PaaS, SaaS).
+- When a technical English term is important, explain it in Somali first and place the English term in parentheses only once.
+- Remove corruption, strange symbols, foreign scripts, placeholder text, and transcript noise.
 - Correct obvious wording mistakes from the transcript when they are clearly accidental.
 - Do not use code fences, HTML, tables, or numbered JSON objects.
 
 Writing quality rules:
-- Write like a strong Somali lecturer preparing revision notes for university students.
-- Go beyond simple translation: explain the meaning, why the idea matters, and how the ideas connect.
+- Write like a strong Somali lecturer preparing comprehensive revision notes for university students.
+- Go beyond simple translation: explain the meaning, why the idea matters, and how ideas connect to each other.
 - Prefer clear Somali sentences over literal English structure.
 - Keep the tone formal, accurate, and student-friendly.
 - Use markdown that renders cleanly:
@@ -708,10 +728,26 @@ Writing quality rules:
   - use bullet lists with -
 - Avoid raw asterisks, malformed markdown, and decorative separators.
 
-Expected structure for structured_content:
-- Start with ### Dulmar Faahfaahsan
-- Include at least one more heading such as ### Sharaxaad Qoto Dheer, ### Tusaalooyin iyo Adeegsi, ### Erayo Muhiim ah, or ### Gunaanad
-- Under each section, write descriptive Somali paragraphs and relevant bullet points
+Required structure for structured_content — you MUST include ALL of these sections:
+1. ### Dulmar Faahfaahsan  
+   (Full overview of the entire lecture — what it covers and why it matters)
+
+2. ### Mawduucyada Ugu Muhiimsan  
+   (One detailed subsection per major topic in the lecture. Each subsection must have a bold heading, descriptive Somali paragraphs, and bullet points. Do NOT merge multiple topics into one subsection — give each its own space.)
+
+3. ### Tusaalooyin iyo Adeegsi  
+   (Real examples, use cases, or demonstrations mentioned in the lecture, explained in Somali)
+
+4. ### Erayo Muhiim ah (Glossary)  
+   (Key terms defined in Somali with English in parentheses)
+
+5. ### Su'aalaha Dib-u-Eegista  
+   (Revision questions in Somali)
+
+6. ### Gunaanad  
+   (Closing summary of the most important takeaways from the full lecture)
+
+IMPORTANT: The structured_content must be proportional to the lecture length. A 2-hour lecture must produce long, detailed notes — not a short summary. Every major topic discussed in the source material must appear as its own subsection.
 
 Source material:
 {source_material}
@@ -733,6 +769,8 @@ Return strict JSON with exactly these keys:
 - structured_content
 - summary
 - key_points
+- glossary
+- revision_questions
 
 Problems found in the draft:
 {serialized_issues}
@@ -743,9 +781,11 @@ Repair rules:
 - Make the notes richer and clearer than the draft by explaining concepts, significance, and examples when the transcript supports them.
 - Keep the tone formal, polished, and easy for Somali-speaking students to study from.
 - Use clean markdown headings with ### and clean bullet lists with -.
-- Ensure summary is 2 to 4 full Somali sentences.
-- Ensure key_points contains 5 to 8 strong Somali points.
-- Ensure structured_content has at least two Somali headings and detailed explanatory paragraphs.
+- Ensure summary is 4 to 6 full Somali sentences.
+- Ensure key_points contains 15 to 25 strong Somali points when the source supports it.
+- Ensure glossary contains 8 to 15 useful Somali definitions when the source supports it.
+- Ensure revision_questions contains 8 to 12 Somali questions when the source supports it.
+- Ensure structured_content includes the required sections: Dulmar Faahfaahsan, Mawduucyada Ugu Muhiimsan, Tusaalooyin iyo Adeegsi, Erayo Muhiim ah, Su'aalaha Dib-u-Eegista, and Gunaanad.
 
 Source transcript:
 {transcript_text}

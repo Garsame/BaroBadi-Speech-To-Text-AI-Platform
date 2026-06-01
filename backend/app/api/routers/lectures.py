@@ -10,7 +10,7 @@ import mimetypes
 
 from app.core.config import BACKEND_ROOT, settings
 from app.core.database import get_db
-from app.models.log import SystemLog
+from app.models.log import SystemLog, ActivityLog
 from app.models.user import User
 from app.models.lecture import Lecture as ModelLecture, LectureStatus
 from app.schemas.chat import (
@@ -19,10 +19,19 @@ from app.schemas.chat import (
     LectureChatMessageDetail,
 )
 from app.schemas.lecture import LectureCreate, Lecture, LectureDetail, LectureLog
+from app.schemas.quiz import (
+    QuizResponse,
+    QuizAttemptSubmit,
+    QuizAttemptResponse,
+    QuizDashboardSummary,
+)
+from app.models.quiz import Quiz as ModelQuiz, QuizAttempt as ModelQuizAttempt
 from app.services.lecture_chat_service import LectureChatService
 from app.services.lecture_service import LectureService
 from app.services.youtube_service import YouTubeService
+from app.services.quiz_service import QuizService
 from app.api.dependencies import get_current_active_user
+
 
 router = APIRouter()
 
@@ -341,6 +350,21 @@ def create_new_lecture(
 
     lecture_service = LectureService(db, background_tasks=background_tasks)
     lecture = lecture_service.create_lecture(lecture_in, owner_id=current_user.id)
+    
+    # Log user activity
+    db.add(
+        ActivityLog(
+            action="LECTURE_SUBMITTED",
+            user_id=current_user.id,
+            details={
+                "lecture_id": lecture.id,
+                "title": lecture.title,
+                "source_type": lecture.source_type,
+            }
+        )
+    )
+    db.commit()
+
     return lecture
 
 @router.post("/upload", response_model=Lecture)
@@ -389,6 +413,21 @@ async def upload_lecture_video(
     )
     lecture_service = LectureService(db, background_tasks=background_tasks)
     lecture = lecture_service.create_lecture(lecture_in, owner_id=current_user.id)
+
+    # Log user activity
+    db.add(
+        ActivityLog(
+            action="LECTURE_SUBMITTED",
+            user_id=current_user.id,
+            details={
+                "lecture_id": lecture.id,
+                "title": lecture.title,
+                "source_type": lecture.source_type,
+            }
+        )
+    )
+    db.commit()
+
     return lecture
 
 @router.get("/", response_model=List[Lecture])
@@ -462,6 +501,118 @@ def read_notes_library(
             }
         )
 
+    return result
+
+
+
+@router.get("/quizzes/dashboard-summary", response_model=QuizDashboardSummary)
+def get_quiz_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Retrieve quiz dashboard summary for the current user."""
+    quiz_service = QuizService(db)
+    return quiz_service.get_dashboard_summary(user_id=current_user.id)
+
+
+@router.get("/{lecture_id}/quiz", response_model=QuizResponse)
+def get_lecture_quiz(
+    lecture_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Retrieve quiz questions for a specific completed lecture."""
+    quiz = db.query(ModelQuiz).filter(ModelQuiz.lecture_id == lecture_id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz has not been generated for this lecture yet.")
+    
+    return {
+        "id": quiz.id,
+        "lecture_id": quiz.lecture_id,
+        "questions": quiz.questions_json,
+        "created_at": quiz.created_at
+    }
+
+
+@router.post("/{lecture_id}/quiz/generate", response_model=QuizResponse)
+def generate_lecture_quiz(
+    lecture_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Generate (or retrieve if already exists) a quiz for a completed lecture."""
+    quiz_service = QuizService(db)
+    try:
+        quiz = quiz_service.generate_quiz(lecture_id=lecture_id, user_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "id": quiz.id,
+        "lecture_id": quiz.lecture_id,
+        "questions": quiz.questions_json,
+        "created_at": quiz.created_at
+    }
+
+
+@router.post("/{lecture_id}/quiz/submit", response_model=QuizAttemptResponse)
+def submit_lecture_quiz(
+    lecture_id: int,
+    payload: QuizAttemptSubmit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Submit student's quiz answers, grade them programmatically, and generate AI feedback."""
+    quiz_service = QuizService(db)
+    try:
+        attempt = quiz_service.submit_quiz_answers(
+            lecture_id=lecture_id,
+            attempt_in=payload,
+            user_id=current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "id": attempt.id,
+        "quiz_id": attempt.quiz_id,
+        "score": attempt.score,
+        "total_questions": attempt.total_questions,
+        "corrections": attempt.feedback_json.get("corrections", []),
+        "general_feedback": attempt.feedback_json.get("general_feedback", ""),
+        "created_at": attempt.created_at
+    }
+
+
+@router.get("/{lecture_id}/quiz/attempts", response_model=List[QuizAttemptResponse])
+def get_lecture_quiz_attempts(
+    lecture_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Retrieve past quiz attempts for the current user and lecture."""
+    attempts = (
+        db.query(ModelQuizAttempt)
+        .filter(ModelQuizAttempt.lecture_id == lecture_id, ModelQuizAttempt.user_id == current_user.id)
+        .order_by(ModelQuizAttempt.created_at.desc())
+        .all()
+    )
+    
+    result = []
+    for attempt in attempts:
+        result.append({
+            "id": attempt.id,
+            "quiz_id": attempt.quiz_id,
+            "score": attempt.score,
+            "total_questions": attempt.total_questions,
+            "corrections": attempt.feedback_json.get("corrections", []),
+            "general_feedback": attempt.feedback_json.get("general_feedback", ""),
+            "created_at": attempt.created_at
+        })
     return result
 
 

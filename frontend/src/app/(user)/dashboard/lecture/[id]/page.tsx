@@ -1,7 +1,12 @@
 "use client";
 
 import React, { use, useEffect, useRef, useState } from "react";
-import { FaArrowRight, FaPause, FaPlay, FaSyncAlt } from "react-icons/fa";
+import { FaArrowUp, FaPause, FaPlay } from "react-icons/fa";
+import {
+  CONNECTION_QUALITY_META,
+  type ConnectionQualitySnapshot,
+  useConnectionQuality,
+} from "@/hooks/useConnectionQuality";
 import { apiUrl, authHeaders, getErrorMessage } from "@/lib/api";
 import { getSessionToken } from "@/lib/session";
 
@@ -126,6 +131,66 @@ async function fetchLectureChatMessages(
   return (await response.json()) as LectureChatMessage[];
 }
 
+function getFriendlyErrorMessage(rawMessage: string): string {
+  const msg = rawMessage || "";
+  
+  // 1. Check for 503 / UNAVAILABLE / High Demand
+  if (
+    msg.includes("503") ||
+    msg.includes("UNAVAILABLE") ||
+    msg.includes("high demand") ||
+    msg.includes("experiencing high demand")
+  ) {
+    return "The AI tutor is currently busy handling a high volume of student requests. Please wait a few moments and try asking your question again.\n\n" +
+           "Macallinka AI-ga wuxuu hadda ku mashquulsan yahay tiro aad u badan oo su'aalo ah. Fadlan cabbaar sug oo dib u tijaabi su'aashaada.";
+  }
+  
+  // 2. Check for 429 / Rate Limit
+  if (
+    msg.includes("429") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("rate limit")
+  ) {
+    return "The AI tutor is temporarily resting due to high traffic limits. Please take a short 1-minute break and try again.\n\n" +
+           "Macallinka AI-ga wuxuu si ku-meel-gaar ah u qaadanayaa nasasho sababo la xiriira culayska su'aalaha. Fadlan sug 1 daqiiqo oo dib u tijaabi.";
+  }
+  
+  // 3. Check for 400 / Invalid Argument / Context Limit
+  if (
+    msg.includes("400") ||
+    msg.includes("INVALID_ARGUMENT") ||
+    msg.includes("too large")
+  ) {
+    return "This lecture transcript or conversation is too long for the tutor to digest at once. Please try asking about a specific part of the lecture.\n\n" +
+           "Qoraalka casharkaan ama sheekadaan ayaa aad u dheer oo uusan macallinku hal mar wada fahmi karin. Fadlan isku day inaad weydo su'aal gaar ah.";
+  }
+  
+  // 4. Check for API Credentials / Permission Denied
+  if (
+    msg.includes("401") ||
+    msg.includes("403") ||
+    msg.includes("UNAUTHENTICATED") ||
+    msg.includes("PERMISSION_DENIED") ||
+    msg.includes("GEMINI_API_KEY")
+  ) {
+    return "There is an AI configuration issue on the server. Please contact support or check if the API key is valid.\n\n" +
+           "Waxaa jira cilad habayneed dhinaca AI-ga ee server-ka. Fadlan la xiriir maamulaha si loo hubiyo furaha API-ga.";
+  }
+  
+  // 5. Check for Server Offline / Network Error
+  if (
+    msg.toLowerCase().includes("failed to fetch") ||
+    msg.toLowerCase().includes("network error") ||
+    msg.toLowerCase().includes("connection")
+  ) {
+    return "Unable to connect to the server. Please check your internet connection or verify if the backend service is running.\n\n" +
+           "Kuma xirmi karno server-ka dambe. Fadlan hubi khadkaaga internet-ka ama inuu server-ku shaqaynayo.";
+  }
+  
+  // Fallback
+  return rawMessage;
+}
+
 function getChatMessageTimestamp(message: LectureChatMessage): number {
   const timestamp = new Date(message.created_at).getTime();
   return Number.isNaN(timestamp) ? 0 : timestamp;
@@ -145,22 +210,6 @@ function mergeLectureChatMessages(
       getChatMessageTimestamp(left) - getChatMessageTimestamp(right);
 
     return timestampDifference || left.id - right.id;
-  });
-}
-
-function formatChatMessageTime(dateValue?: string | null): string {
-  if (!dateValue) {
-    return "Just now";
-  }
-
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) {
-    return "Just now";
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -525,13 +574,7 @@ function renderChatMessageContent(text: string): React.ReactNode {
     elements.push(
       <ul
         key={`chat-list-${elements.length}`}
-        style={{
-          margin: 0,
-          paddingLeft: "1.25rem",
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.45rem",
-        }}
+        className="lecture-chat-markdown-list"
       >
         {listItems.map((item, index) => (
           <li key={`${item}-${index}`}>{renderInlineFormattedText(item)}</li>
@@ -555,7 +598,7 @@ function renderChatMessageContent(text: string): React.ReactNode {
       elements.push(
         <strong
           key={`chat-heading-${elements.length}`}
-          style={{ display: "block", fontWeight: 800 }}
+          className="lecture-chat-markdown-heading"
         >
           {renderInlineFormattedText(headingMatch[2].trim())}
         </strong>,
@@ -563,7 +606,7 @@ function renderChatMessageContent(text: string): React.ReactNode {
       return;
     }
 
-    const bulletMatch = trimmedLine.match(/^[-*]\s+(.*)$/);
+    const bulletMatch = trimmedLine.match(/^[-*•]\s+(.*)$/);
     if (bulletMatch) {
       listItems.push(bulletMatch[1].trim());
       return;
@@ -571,7 +614,7 @@ function renderChatMessageContent(text: string): React.ReactNode {
 
     flushList();
     elements.push(
-      <p key={`chat-paragraph-${elements.length}`} style={{ margin: 0 }}>
+      <p key={`chat-paragraph-${elements.length}`} className="lecture-chat-markdown-paragraph">
         {renderInlineFormattedText(trimmedLine)}
       </p>,
     );
@@ -580,7 +623,7 @@ function renderChatMessageContent(text: string): React.ReactNode {
   flushList();
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+    <div className="lecture-chat-markdown">
       {elements}
     </div>
   );
@@ -720,6 +763,137 @@ function getConfidenceColor(score?: number): string {
   return "var(--danger-color)";
 }
 
+function isSlowConnectionLevel(
+  level: ConnectionQualitySnapshot["level"],
+): boolean {
+  return level === "slow" || level === "poor";
+}
+
+function ConnectionQualityIndicator({
+  quality,
+}: {
+  quality: ConnectionQualitySnapshot;
+}) {
+  const meta = quality.level
+    ? CONNECTION_QUALITY_META[quality.level]
+    : {
+        label: "Checking",
+        color: "#64748b",
+        dotClassName: "bg-slate-400",
+        barClassName: "bg-slate-400",
+        textClassName: "text-slate-500",
+      };
+  const latencyLabel =
+    typeof quality.latencyMs === "number"
+      ? `${Math.round(quality.latencyMs)}ms`
+      : "Measuring";
+
+  return (
+    <div
+      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold shadow-sm"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.45rem",
+        border: "1px solid var(--border-color)",
+        borderRadius: "999px",
+        background: "var(--bg-color)",
+        padding: "0.25rem 0.6rem",
+        fontSize: "0.75rem",
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 rounded-full ${meta.dotClassName}`}
+        style={{
+          width: "0.5rem",
+          height: "0.5rem",
+          borderRadius: "999px",
+          backgroundColor: meta.color,
+          flexShrink: 0,
+        }}
+      />
+      <span style={{ opacity: 0.72 }}>Connection</span>
+      <span className={meta.textClassName} style={{ color: meta.color }}>
+        {meta.label}
+      </span>
+      <span
+        aria-hidden="true"
+        className={`h-1 w-7 rounded-full ${meta.barClassName}`}
+        style={{
+          width: "1.75rem",
+          height: "0.25rem",
+          borderRadius: "999px",
+          backgroundColor: meta.color,
+          opacity: quality.level ? 1 : 0.5,
+        }}
+      />
+      <span style={{ opacity: 0.55 }}>{latencyLabel}</span>
+    </div>
+  );
+}
+
+function SlowConnectionToast({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      role="status"
+      className="fixed bottom-5 right-5 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-orange-200 bg-white p-4 text-sm shadow-lg"
+      style={{
+        position: "fixed",
+        right: "1.25rem",
+        bottom: "1.25rem",
+        zIndex: 50,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: "0.75rem",
+        maxWidth: "24rem",
+        border: "1px solid #fed7aa",
+        borderRadius: "0.75rem",
+        background: "var(--bg-color)",
+        color: "var(--text-color)",
+        padding: "1rem",
+        boxShadow: "0 18px 45px rgba(15, 23, 42, 0.22)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="mt-1 h-2.5 w-2.5 rounded-full bg-orange-500"
+        style={{
+          width: "0.65rem",
+          height: "0.65rem",
+          marginTop: "0.25rem",
+          borderRadius: "999px",
+          backgroundColor: "#f97316",
+          flexShrink: 0,
+        }}
+      />
+      <p style={{ margin: 0, lineHeight: 1.45 }}>
+        Your internet connection is slow. This may affect how long your lecture
+        takes to process. The app is still working.
+      </p>
+      <button
+        type="button"
+        aria-label="Dismiss slow connection alert"
+        className="ml-1 rounded p-1 text-slate-500 hover:bg-slate-100"
+        onClick={onClose}
+        style={{
+          marginLeft: "0.25rem",
+          border: "none",
+          background: "transparent",
+          color: "inherit",
+          cursor: "pointer",
+          fontWeight: 800,
+          lineHeight: 1,
+        }}
+      >
+        X
+      </button>
+    </div>
+  );
+}
+
 export default function LectureDetailPage({
   params,
 }: {
@@ -727,7 +901,11 @@ export default function LectureDetailPage({
 }) {
   const { id } = use(params);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const shouldStickToChatBottomRef = useRef(true);
   const transcriptAudioRef = useRef<HTMLAudioElement | null>(null);
+  const transcriptScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const transcriptSegmentRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeTab, setActiveTab] =
     useState<(typeof tabs)[number]>("overview");
@@ -759,6 +937,15 @@ export default function LectureDetailPage({
     null,
   );
   const [isNotesPlaying, setIsNotesPlaying] = useState(false);
+  const [showSlowConnectionToast, setShowSlowConnectionToast] =
+    useState(false);
+  const [hasShownSlowConnectionToast, setHasShownSlowConnectionToast] =
+    useState(false);
+  const isProcessingLecture =
+    lecture?.status?.toLowerCase() === "processing";
+  const connectionQuality = useConnectionQuality({
+    enabled: isProcessingLecture,
+  });
 
   const transcriptText =
     lecture?.transcript?.cleaned_text || lecture?.transcript?.raw_text || "";
@@ -850,6 +1037,49 @@ export default function LectureDetailPage({
   }, [id, lecture?.status]);
 
   useEffect(() => {
+    setShowSlowConnectionToast(false);
+    setHasShownSlowConnectionToast(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (isProcessingLecture) {
+      return;
+    }
+
+    setShowSlowConnectionToast(false);
+    setHasShownSlowConnectionToast(false);
+  }, [isProcessingLecture]);
+
+  useEffect(() => {
+    if (
+      !isProcessingLecture ||
+      hasShownSlowConnectionToast ||
+      !isSlowConnectionLevel(connectionQuality.level)
+    ) {
+      return;
+    }
+
+    setShowSlowConnectionToast(true);
+    setHasShownSlowConnectionToast(true);
+  }, [
+    connectionQuality.level,
+    hasShownSlowConnectionToast,
+    isProcessingLecture,
+  ]);
+
+  useEffect(() => {
+    if (!showSlowConnectionToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowSlowConnectionToast(false);
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [showSlowConnectionToast]);
+
+  useEffect(() => {
     setChatMessages([]);
     setChatLoaded(false);
     setChatLoading(false);
@@ -879,15 +1109,13 @@ export default function LectureDetailPage({
         );
         setChatError(null);
         setChatLoaded(true);
-      } catch (err: unknown) {
+      } catch (err: any) {
         if (!isActive) {
           return;
         }
 
         setChatError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load lecture chatbot history.",
+          err instanceof Error ? err.message : String(err),
         );
         setChatLoaded(true);
       } finally {
@@ -909,8 +1137,41 @@ export default function LectureDetailPage({
       return;
     }
 
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeTab, chatMessages, chatSending]);
+    if (!shouldStickToChatBottomRef.current) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      chatEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    });
+  }, [
+    activeTab,
+    chatError,
+    chatMessages,
+    chatSending,
+    pendingChatQuestion,
+  ]);
+
+  useEffect(() => {
+    const textarea = chatTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    const lineHeight = Number.parseFloat(
+      window.getComputedStyle(textarea).lineHeight,
+    ) || 24;
+    const maxHeight = lineHeight * 5 + 20;
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [chatDraft]);
 
   useEffect(() => {
     setSessionToken(getSessionToken());
@@ -948,9 +1209,35 @@ export default function LectureDetailPage({
       return;
     }
 
-    transcriptSegmentRefs.current[activeTranscriptSegmentIndex]?.scrollIntoView({
+    const container = transcriptScrollContainerRef.current;
+    const activeSegment =
+      transcriptSegmentRefs.current[activeTranscriptSegmentIndex];
+
+    if (!container || !activeSegment) {
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const activeSegmentRect = activeSegment.getBoundingClientRect();
+    const activeSegmentTop =
+      activeSegmentRect.top - containerRect.top + container.scrollTop;
+    const centeredScrollTop =
+      activeSegmentTop - (container.clientHeight - activeSegmentRect.height) / 2;
+    const topAlignedScrollTop = activeSegmentTop - 16;
+    const maxScrollTop = container.scrollHeight - container.clientHeight;
+    const nextScrollTop = Math.min(
+      Math.max(
+        activeSegmentRect.height > container.clientHeight
+          ? topAlignedScrollTop
+          : centeredScrollTop,
+        0,
+      ),
+      Math.max(maxScrollTop, 0),
+    );
+
+    container.scrollTo({
+      top: nextScrollTop,
       behavior: "smooth",
-      block: "nearest",
     });
   }, [
     activeTab,
@@ -1205,15 +1492,6 @@ export default function LectureDetailPage({
   const chatbotAvailable =
     isLectureComplete &&
     (Boolean(lecture.transcript) || Boolean(lecture.notes));
-  const hasVisibleChat =
-    chatMessages.length > 0 || Boolean(pendingChatQuestion) || chatSending;
-  const chatHistoryStatus = chatLoading
-    ? "Checking saved history in the background..."
-    : chatMessages.length > 0
-      ? `${chatMessages.length} saved message${chatMessages.length === 1 ? "" : "s"} loaded`
-      : chatLoaded
-        ? "No previous conversations for this lecture."
-        : "Saved chat history will load automatically.";
   const refreshLecture = async () => {
     const { detail, lectureLogs } = await fetchLectureResources(id);
     setLecture(detail);
@@ -1320,13 +1598,10 @@ export default function LectureDetailPage({
         ]),
       );
       setChatLoaded(true);
-    } catch (err: unknown) {
+    } catch (err: any) {
       setChatError(
-        err instanceof Error
-          ? err.message
-          : "Failed to get a response from the lecture chatbot.",
+        err instanceof Error ? err.message : String(err)
       );
-      setChatDraft(trimmedDraft);
     } finally {
       setPendingChatQuestion(null);
       setChatSending(false);
@@ -1406,139 +1681,130 @@ export default function LectureDetailPage({
     );
   };
 
-  const renderChatComposer = (centered = false) => (
-    <div
-      style={{
-        width: "100%",
-        maxWidth: "850px",
-        margin: centered ? "0 auto" : "1.5rem auto 0 auto",
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-      }}
-    >
-      {centered && (
-        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "80px",
-              height: "80px",
-              borderRadius: "24px",
-              background: "linear-gradient(135deg, var(--primary-color), #818cf8)",
-              color: "#fff",
-              fontSize: "2.2rem",
-              fontWeight: 800,
-              marginBottom: "1.5rem",
-              boxShadow: "0 8px 16px rgba(99, 102, 241, 0.2)",
-            }}
-          >
-            BB
-          </div>
-          <h2 style={{ fontSize: "2.5rem", fontWeight: 800, marginBottom: "1rem", letterSpacing: "-0.03em", color: "var(--text-color)" }}>
-            How can I help with this lecture?
-          </h2>
-          <p
-            style={{
-              margin: "0 auto",
-              maxWidth: "52ch",
-              color: "var(--text-muted)",
-              lineHeight: 1.7,
-              fontSize: "1.1rem",
-            }}
-          >
-            Ask me to explain concepts from the transcript, generate Somali notes, or quiz you on the lecture content.
-          </p>
-        </div>
-      )}
+  const handleChatScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const distanceFromBottom =
+      target.scrollHeight - target.scrollTop - target.clientHeight;
 
-      <div
-        style={{
-          background: "#1e1e1e",
-          borderRadius: "24px",
-          padding: "1.25rem 1.5rem",
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.25rem",
-          boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
-          border: "1px solid #333",
-        }}
-      >
-        <textarea
-          value={chatDraft}
-          onChange={(event) => setChatDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void handleAskChatbot();
-            }
-          }}
-          placeholder="Ask anything..."
-          disabled={!chatbotAvailable || chatSending}
-          style={{
-            minHeight: centered ? "160px" : "100px",
-            maxHeight: "350px",
-            width: "100%",
-            border: "none",
-            padding: "0.5rem 0",
-            fontSize: "1.1rem",
-            lineHeight: 1.6,
-            resize: "none",
-            backgroundColor: "transparent",
-            color: "#e2e2e2",
-            outline: "none",
-            fontFamily: "inherit",
-          }}
-        />
+    shouldStickToChatBottomRef.current = distanceFromBottom < 80;
+  };
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginTop: "0.5rem",
-          }}
-        >
-          <div style={{ color: "#fff", fontSize: "0.85rem", opacity: 0.62 }}>
-            {chatHistoryStatus}
-          </div>
+  const handleChatDraftChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    setChatDraft(event.target.value);
+  };
 
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-             <button
-                type="button"
-                onClick={() => void handleAskChatbot()}
-                disabled={!chatbotAvailable || chatSending || !chatDraft.trim()}
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "50%",
-                  backgroundColor: !chatDraft.trim() ? "#444" : "#0084ff",
-                  color: "#fff",
-                  border: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: (!chatDraft.trim() || chatSending) ? "default" : "pointer",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                {chatSending ? (
-                   <span style={{ fontSize: "0.7rem" }}>...</span>
-                ) : (
-                  <FaArrowRight aria-hidden="true" />
-                )}
-              </button>
-          </div>
+  const handleChatKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    if (chatDraft.trim() && chatbotAvailable && !chatSending) {
+      void handleAskChatbot();
+    }
+  };
+
+  const renderChatBubble = ({
+    label,
+    content,
+    role,
+    variant = "default",
+  }: {
+    label: "You" | "Assistant";
+    content: React.ReactNode;
+    role: "user" | "assistant";
+    variant?: "default" | "error";
+  }) => {
+    const isUser = role === "user";
+    const rowClassName = isUser
+      ? "lecture-chat-row lecture-chat-row-user"
+      : "lecture-chat-row lecture-chat-row-assistant";
+    const groupClassName = isUser
+      ? "lecture-chat-group lecture-chat-group-user"
+      : "lecture-chat-group lecture-chat-group-assistant";
+    const bubbleClassName = [
+      "lecture-chat-bubble",
+      isUser ? "lecture-chat-bubble-user" : "lecture-chat-bubble-assistant",
+      variant === "error" ? "lecture-chat-bubble-error" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return (
+      <div className={rowClassName}>
+        <div className={groupClassName}>
+          <span className="lecture-chat-label">{label}</span>
+          <div className={bubbleClassName}>{content}</div>
         </div>
       </div>
+    );
+  };
 
-      {!centered && (
-        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textAlign: "center", marginTop: "0.85rem", opacity: 0.6 }}>
-          AI-generated Somali notes can occasionally include inaccuracies.
-        </p>
-      )}
-    </div>
-  );
+  const renderWelcomeBubble = () =>
+    renderChatBubble({
+      label: "Assistant",
+      role: "assistant",
+      content: (
+        <div className="lecture-chat-markdown">
+          <p className="lecture-chat-markdown-paragraph">
+            Salaan! Waxaan kaa caawin karaa su&apos;aalaha ku saabsan
+            muhadaran. Weydii wax kasta oo ku saabsan qoraalka ama
+            xusuus-qorka Soomaaliga.
+          </p>
+          <p className="lecture-chat-markdown-paragraph lecture-chat-note">
+            Note: This chat is not saved and may occasionally make mistakes.
+          </p>
+        </div>
+      ),
+    });
+
+  const renderTypingIndicator = () =>
+    renderChatBubble({
+      label: "Assistant",
+      role: "assistant",
+      content: (
+        <div className="lecture-chat-typing" aria-label="Assistant is typing">
+          <span />
+          <span />
+          <span />
+        </div>
+      ),
+    });
+
+  const renderChatComposer = () => {
+    const sendDisabled =
+      !chatbotAvailable || chatSending || chatDraft.trim().length === 0;
+
+    return (
+      <div className="lecture-chat-composer-shell">
+        <div className="lecture-chat-input-box">
+          <textarea
+            ref={chatTextareaRef}
+            value={chatDraft}
+            onChange={handleChatDraftChange}
+            onKeyDown={handleChatKeyDown}
+            rows={1}
+            placeholder="Ask anything about this lecture..."
+            disabled={!chatbotAvailable || chatSending}
+            className="lecture-chat-textarea"
+          />
+          <button
+            type="button"
+            aria-label="Send chat message"
+            className="lecture-chat-send-button"
+            disabled={sendDisabled}
+            onClick={() => void handleAskChatbot()}
+          >
+            <FaArrowUp aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
 
 
@@ -1573,6 +1839,349 @@ export default function LectureDetailPage({
             transform: translateX(260%);
           }
         }
+
+        .chatbot-container {
+          display: flex;
+          flex-direction: column;
+          height: calc(100vh - 350px);
+          min-height: 550px;
+          overflow: hidden;
+          background: var(--secondary-bg);
+          border-radius: 12px;
+          border: 1px solid var(--border-color);
+          box-shadow: var(--card-shadow);
+          position: relative;
+        }
+
+        .messages-area {
+          flex: 1;
+          overflow-y: auto;
+          padding-top: 1.5rem;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+        }
+
+        .input-bar {
+          flex-shrink: 0;
+          width: 100%;
+          border-top: 1px solid var(--border-color);
+          background: var(--bg-color);
+          padding: 1.25rem 0;
+          box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.03);
+        }
+
+        .content-column {
+          max-width: 48rem; /* 768px */
+          margin: 0 auto;
+          padding: 0 1.5rem;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 1.35rem;
+        }
+
+        .messages-area .content-column {
+          padding-bottom: 80px; /* calculated bottom padding */
+        }
+
+        .lecture-chat-textarea::-webkit-scrollbar {
+          width: 7px;
+        }
+
+        .lecture-chat-textarea::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .lecture-chat-textarea::-webkit-scrollbar-thumb {
+          background: rgba(148, 163, 184, 0.35);
+          border-radius: 999px;
+        }
+
+        .lecture-chat-row {
+          display: flex;
+          width: 100%;
+          animation: lecture-chat-fade-in 0.22s ease-out;
+        }
+
+        .lecture-chat-row-user {
+          justify-content: flex-end;
+        }
+
+        .lecture-chat-row-assistant {
+          justify-content: flex-start;
+        }
+
+        .lecture-chat-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+          width: 100%;
+        }
+
+        .lecture-chat-group-user {
+          align-items: flex-end;
+          max-width: 80%;
+          margin-left: auto;
+        }
+
+        .lecture-chat-group-assistant {
+          align-items: flex-start;
+          max-width: 100%;
+        }
+
+        .lecture-chat-label {
+          padding: 0 0.35rem;
+          font-size: 0.72rem;
+          font-weight: 700;
+          color: var(--text-muted, #64748b);
+          opacity: 0.72;
+        }
+
+        .lecture-chat-group-assistant .lecture-chat-label {
+          padding: 0;
+        }
+
+        .lecture-chat-group-user .lecture-chat-label {
+          text-align: right;
+          width: 100%;
+        }
+
+        .lecture-chat-bubble {
+          max-width: 100%;
+          padding: 0.85rem 1rem;
+          border-radius: 18px;
+          line-height: 1.7;
+          font-size: 0.98rem;
+          word-break: break-word;
+          transition:
+            background-color 0.2s ease,
+            border-color 0.2s ease,
+            transform 0.2s ease;
+        }
+
+        .lecture-chat-bubble-user {
+          color: #fff;
+          background: linear-gradient(135deg, var(--primary-color), #7c3aed);
+          border-bottom-right-radius: 6px;
+          box-shadow: 0 12px 28px rgba(99, 102, 241, 0.24);
+        }
+
+        .lecture-chat-bubble-assistant {
+          color: var(--text-color);
+          background: transparent;
+          border: none;
+          padding: 0;
+          box-shadow: none;
+          border-radius: 0;
+        }
+
+        .lecture-chat-bubble-error {
+          color: #dc2626;
+          background: rgba(239, 68, 68, 0.1) !important;
+          border: 1px solid rgba(239, 68, 68, 0.3) !important;
+          padding: 0.85rem 1rem !important;
+          border-radius: 12px !important;
+        }
+
+        .lecture-chat-user-text {
+          white-space: pre-wrap;
+        }
+
+        .lecture-chat-markdown {
+          display: flex;
+          flex-direction: column;
+          gap: 0.7rem;
+        }
+
+        .lecture-chat-markdown-paragraph {
+          margin: 0;
+        }
+
+        .lecture-chat-markdown-heading {
+          display: block;
+          font-weight: 800;
+          font-size: 1rem;
+          line-height: 1.5;
+        }
+
+        .lecture-chat-markdown-list {
+          margin: 0;
+          padding-left: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.45rem;
+        }
+
+        .lecture-chat-note {
+          color: var(--text-muted, #64748b);
+          font-size: 0.9rem;
+        }
+
+        .lecture-chat-composer-shell {
+          width: 100%;
+        }
+
+        .lecture-chat-input-box {
+          position: relative;
+          width: 100%;
+          border: 1px solid var(--border-color);
+          border-radius: 22px;
+          background: var(--secondary-bg);
+          padding: 1rem 3.75rem 1rem 1.1rem;
+          box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
+          transition:
+            border-color 0.2s ease,
+            box-shadow 0.2s ease,
+            background-color 0.2s ease;
+        }
+
+        .lecture-chat-input-box:focus-within {
+          border-color: rgba(99, 102, 241, 0.65);
+          box-shadow:
+            0 8px 32px rgba(15, 23, 42, 0.1),
+            0 0 0 3px rgba(99, 102, 241, 0.16);
+        }
+
+        .lecture-chat-textarea {
+          display: block;
+          width: 100%;
+          min-height: 2.35rem;
+          max-height: calc(1.6rem * 5 + 24px);
+          border: none;
+          outline: none;
+          resize: none;
+          background: transparent;
+          color: var(--text-color);
+          font: inherit;
+          line-height: 1.6;
+          padding: 0.2rem 0;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+        }
+
+        .lecture-chat-textarea::placeholder {
+          color: var(--text-muted, #64748b);
+          opacity: 0.78;
+        }
+
+        .lecture-chat-textarea:disabled {
+          cursor: not-allowed;
+          opacity: 0.65;
+        }
+
+        .lecture-chat-send-button {
+          position: absolute;
+          right: 0.75rem;
+          bottom: 0.9rem;
+          width: 2.35rem;
+          height: 2.35rem;
+          border: none;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          background: linear-gradient(135deg, var(--primary-color), #7c3aed);
+          cursor: pointer;
+          transition:
+            transform 0.18s ease,
+            opacity 0.18s ease,
+            background-color 0.18s ease;
+        }
+
+        .lecture-chat-send-button:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        .lecture-chat-send-button:disabled {
+          background: #64748b;
+          cursor: not-allowed;
+          opacity: 0.45;
+          transform: none;
+        }
+
+        .lecture-chat-typing {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.38rem;
+          min-width: 3.2rem;
+          min-height: 1.3rem;
+          background: rgba(148, 163, 184, 0.08);
+          border: 1px solid rgba(148, 163, 184, 0.16);
+          padding: 0.5rem 0.75rem;
+          border-radius: 12px;
+        }
+
+        .lecture-chat-typing span {
+          width: 0.42rem;
+          height: 0.42rem;
+          border-radius: 999px;
+          background: var(--primary-color);
+          opacity: 0.45;
+          animation: lecture-chat-dot 1s ease-in-out infinite;
+        }
+
+        .lecture-chat-typing span:nth-child(2) {
+          animation-delay: 0.16s;
+        }
+
+        .lecture-chat-typing span:nth-child(3) {
+          animation-delay: 0.32s;
+        }
+
+        @keyframes lecture-chat-dot {
+          0%, 100% {
+            opacity: 0.35;
+            transform: translateY(0);
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(-3px);
+          }
+        }
+
+        @keyframes lecture-chat-fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .lecture-chat-bubble-assistant {
+            background: transparent;
+            border: none;
+          }
+
+          .lecture-chat-input-box {
+            background: rgba(15, 23, 42, 0.78);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+          }
+
+          .lecture-chat-bubble-error {
+            color: #fecaca;
+          }
+
+          .lecture-chat-typing {
+            background: rgba(30, 41, 59, 0.62);
+            border-color: rgba(148, 163, 184, 0.12);
+          }
+        }
+
+        @media (max-width: 720px) {
+          .chatbot-container {
+            height: calc(100vh - 280px);
+            min-height: 400px;
+          }
+
+          .lecture-chat-group-user {
+            max-width: 90%;
+          }
+        }
       `}</style>
       <div style={{ marginBottom: "2rem" }}>
         <h1>{lecture.title}</h1>
@@ -1596,6 +2205,11 @@ export default function LectureDetailPage({
           <span>|</span>
           <span>Submitted: {formatDate(lecture.created_at)}</span>
         </div>
+        {isProcessingLecture && (
+          <div style={{ marginTop: "0.65rem" }}>
+            <ConnectionQualityIndicator quality={connectionQuality} />
+          </div>
+        )}
 
         {isCancelable ? (
           <div style={{ marginTop: "1.5rem" }}>
@@ -1691,6 +2305,13 @@ export default function LectureDetailPage({
                 boxShadow: "none",
                 padding: 0,
               }
+            : activeTab === "transcript"
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                transform: "none",
+              }
             : undefined
         }
       >
@@ -1774,7 +2395,13 @@ export default function LectureDetailPage({
         )}
 
         {activeTab === "transcript" && (
-          <div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            }}
+          >
             {isLectureComplete && mediaPlaybackUrl && (
               <audio
                 ref={transcriptAudioRef}
@@ -1816,7 +2443,13 @@ export default function LectureDetailPage({
                 gap: "1rem",
                 alignItems: "flex-start",
                 flexWrap: "wrap",
-                marginBottom: "1.5rem",
+                margin: "-0.25rem -0.25rem 1rem",
+                padding: "0.25rem 0.25rem 1rem",
+                position: "sticky",
+                top: 0,
+                zIndex: 3,
+                background: "var(--secondary-bg)",
+                borderBottom: "1px solid var(--border-color)",
               }}
             >
               <div>
@@ -1914,16 +2547,24 @@ export default function LectureDetailPage({
               )}
             </div>
             {isLectureComplete && (mediaUnavailableMessage || mediaPlaybackError) && (
-              <div className="alert alert-info">
+              <div className="alert alert-info" style={{ marginBottom: "1rem" }}>
                 {mediaPlaybackError || mediaUnavailableMessage}
               </div>
             )}
             <div
+              ref={transcriptScrollContainerRef}
               style={{
-                borderRadius: "8px",
-                maxHeight: "650px",
+                background: "var(--bg-color)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "12px",
+                maxHeight: "min(650px, calc(100vh - 390px))",
+                minHeight: "320px",
                 overflowY: "auto",
-                paddingRight: "10px"
+                overscrollBehavior: "contain",
+                overflowAnchor: "none",
+                padding: "1rem",
+                scrollBehavior: "smooth",
+                scrollbarGutter: "stable",
               }}
             >
               {renderFormattedTranscript(transcriptText, transcriptSegments)}
@@ -2089,253 +2730,73 @@ export default function LectureDetailPage({
         )}
 
         {activeTab === "chatbot" && (
-          <div style={{ display: "flex", flexDirection: "column", minHeight: "650px" }}>
+          <div className="chatbot-container">
             <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "1rem",
-                alignItems: "center",
-                marginBottom: "2rem",
-                paddingBottom: "1rem",
-                borderBottom: "1px solid var(--border-color)",
-              }}
+              ref={chatScrollContainerRef}
+              className="messages-area"
+              onScroll={handleChatScroll}
             >
-              <div>
-                <h2 style={{ fontSize: "1.5rem", fontWeight: 800, letterSpacing: "-0.01em" }}>
-                  Somali Study Coach
-                </h2>
-                <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)", fontSize: "0.95rem" }}>
-                  {chatHistoryStatus}
-                </p>
-              </div>
-              {(chatLoaded || chatMessages.length > 0 || chatError) && (
-                <button
-                  type="button"
-                  style={{
-                    background: "transparent",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: "8px",
-                    padding: "0.65rem 0.85rem",
-                    color: "var(--primary-color)",
-                    fontWeight: 700,
-                    cursor: chatLoading ? "not-allowed" : "pointer",
-                    fontSize: "0.95rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    opacity: chatLoading ? 0.65 : 1,
-                  }}
-                  disabled={chatLoading}
-                  onClick={() => {
-                    if (chatLoading) {
-                      return;
-                    }
-                    setChatLoaded(false);
-                    setChatError(null);
-                  }}
-                >
-                  <FaSyncAlt aria-hidden="true" />
-                  Refresh History
-                </button>
-              )}
-            </div>
+              <div className="content-column">
+                {chatMessages.length === 0 &&
+                  !pendingChatQuestion &&
+                  !chatSending &&
+                  !chatError &&
+                  renderWelcomeBubble()}
 
-            {!chatbotAvailable ? (
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "column",
-                  gap: "1.5rem",
-                  padding: "4rem 2rem",
-                  textAlign: "center"
-                }}
-              >
-                <div style={{ fontSize: "3rem" }}>...</div>
-                <div style={{ maxWidth: "400px" }}>
-                  <h3 style={{ marginBottom: "0.5rem" }}>Coach is getting ready...</h3>
-                  <p style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
-                    The lecture chatbot becomes available after the transcript
-                    and study notes have been fully processed.
-                  </p>
-                </div>
-              </div>
-            ) : !hasVisibleChat ? (
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "column",
-                  padding: "2rem 0",
-                }}
-              >
-                {renderChatComposer(true)}
-              </div>
-            ) : (
+                {chatMessages.map((message) => {
+                  const isUser = message.role.toLowerCase() === "user";
 
-
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "1.5rem",
-                    maxHeight: "500px",
-                    minHeight: "400px",
-                    overflowY: "auto",
-                    paddingRight: "1rem",
-                    marginBottom: "2rem",
-                  }}
-                >
-                  {chatMessages.map((message) => {
-                    const isUser = message.role.toLowerCase() === "user";
-
-                    return (
-                      <div
-                        key={message.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: isUser ? "flex-end" : "flex-start",
-                          width: "100%",
-                        }}
-                      >
-                        <div
-                          style={{
-                            maxWidth: "85%",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: isUser ? "flex-end" : "flex-start",
-                          }}
-                        >
-                          <div
-                            style={{
-                              padding: "1rem 1.25rem",
-                              borderRadius: isUser
-                                ? "24px 24px 4px 24px"
-                                : "24px 24px 24px 4px",
-                              backgroundColor: isUser
-                                ? "var(--primary-color)"
-                                : "var(--secondary-bg)",
-                              color: isUser ? "white" : "var(--text-color)",
-                              border: isUser ? "none" : "1px solid var(--border-color)",
-                              boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
-                              lineHeight: 1.7,
-                              fontSize: "1.05rem",
-                            }}
-                          >
-                            {isUser ? (
-                              <div style={{ whiteSpace: "pre-wrap" }}>
-                                {message.content}
-                              </div>
-                            ) : (
-                              renderChatMessageContent(message.content)
-                            )}
+                  return (
+                    <React.Fragment key={message.id}>
+                      {renderChatBubble({
+                        label: isUser ? "You" : "Assistant",
+                        role: isUser ? "user" : "assistant",
+                        content: isUser ? (
+                          <div className="lecture-chat-user-text">
+                            {message.content}
                           </div>
-                          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.4rem", padding: "0 0.5rem" }}>
-                            {isUser ? "You" : "Coach"} - {formatChatMessageTime(message.created_at)}
-                          </span>
-                        </div>
+                        ) : (
+                          renderChatMessageContent(message.content)
+                        ),
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+
+                {pendingChatQuestion &&
+                  renderChatBubble({
+                    label: "You",
+                    role: "user",
+                    content: (
+                      <div className="lecture-chat-user-text">
+                        {pendingChatQuestion}
                       </div>
-                    );
+                    ),
                   })}
 
-                  {pendingChatQuestion && (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        width: "100%",
-                      }}
-                    >
-                      <div
-                        style={{
-                          maxWidth: "85%",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-end",
-                        }}
-                      >
-                        <div
-                          style={{
-                            padding: "1rem 1.25rem",
-                            borderRadius: "24px 24px 4px 24px",
-                            backgroundColor: "var(--primary-color)",
-                            color: "white",
-                            lineHeight: 1.7,
-                            fontSize: "1.05rem",
-                            opacity: 0.84,
-                          }}
-                        >
-                          <div style={{ whiteSpace: "pre-wrap" }}>
-                            {pendingChatQuestion}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.4rem", padding: "0 0.5rem" }}>
-                          You - Sending...
-                        </span>
+                {chatSending && renderTypingIndicator()}
+
+                {chatError &&
+                  renderChatBubble({
+                    label: "Assistant",
+                    role: "assistant",
+                    variant: "error",
+                    content: (
+                      <div className="lecture-chat-user-text">
+                        {getFriendlyErrorMessage(chatError)}
                       </div>
-                    </div>
-                  )}
+                    ),
+                  })}
 
-                  {chatSending && (
-                    <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                      <div
-                        style={{
-                          padding: "1.25rem",
-                          borderRadius: "24px 24px 24px 4px",
-                          backgroundColor: "var(--secondary-bg)",
-                          border: "1px solid var(--border-color)",
-                          display: "flex",
-                          gap: "0.5rem",
-                          alignItems: "center"
-                        }}
-                      >
-                        <div className="typing-dot"></div>
-                        <div className="typing-dot"></div>
-                        <div className="typing-dot"></div>
-                        <span style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>Designing a response...</span>
-                      </div>
-                    </div>
-                  )}
-
-
-                  <div ref={chatEndRef} />
-                </div>
-
-                <div
-                  style={{
-                    position: "sticky",
-                    bottom: 0,
-                    backgroundColor: "transparent",
-                    padding: "1rem 0",
-                    borderTop: "none",
-                    margin: "0",
-                    paddingBottom: "1.5rem"
-                  }}
-                >
-                  <div style={{ maxWidth: "800px", margin: "0 auto", padding: "0 1.5rem" }}>
-                    {renderChatComposer(false)}
-                  </div>
-                </div>
+                <div ref={chatEndRef} />
               </div>
-            )}
+            </div>
 
-            {chatError && (
-              <div className="alert alert-error" style={{ marginTop: "1rem" }}>
-                {chatError}
+            <div className="input-bar">
+              <div className="content-column">
+                {renderChatComposer()}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -2392,6 +2853,11 @@ export default function LectureDetailPage({
           </div>
         )}
       </div>
+      {showSlowConnectionToast && (
+        <SlowConnectionToast
+          onClose={() => setShowSlowConnectionToast(false)}
+        />
+      )}
     </div>
   );
 }

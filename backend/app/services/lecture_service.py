@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session, joinedload
 from app.models.lecture import Lecture, LectureStatus
 from app.models.job import JobStage, JobStatus
+from app.models.log import SystemLog
 from app.models.media_asset import MediaAsset
 from app.models.note import Note
 from app.models.transcript import Transcript
@@ -10,7 +11,6 @@ from app.schemas.lecture import LectureCreate
 from typing import List, Optional
 
 from fastapi import BackgroundTasks
-from app.jobs.pipeline import CANCEL_MESSAGE, create_system_log
 
 logger = logging.getLogger("somali_notes.lecture_service")
 
@@ -116,6 +116,16 @@ class LectureService:
         if updated:
             self.db.commit()
 
+    def _delete_lecture_processing_logs(self, lecture_id: int) -> None:
+        logs = self.db.query(SystemLog).all()
+        for log in logs:
+            metadata = log.metadata_json
+            if (
+                isinstance(metadata, dict)
+                and str(metadata.get("lecture_id")) == str(lecture_id)
+            ):
+                self.db.delete(log)
+
     def create_lecture(self, lecture_in: LectureCreate, owner_id: int) -> Lecture:
         db_obj = Lecture(
             title=lecture_in.title,
@@ -169,6 +179,8 @@ class LectureService:
         if media_asset:
             self.db.delete(media_asset)
 
+        self._delete_lecture_processing_logs(lecture_id)
+
         lecture.status = LectureStatus.submitted
         lecture.job.status = JobStatus.pending
         lecture.job.stage = JobStage.validating_input
@@ -197,6 +209,14 @@ class LectureService:
         job_stage = str(lecture.job.stage)
 
         if job_status.endswith("canceled") or job_stage.endswith("canceled"):
+            lecture.status = LectureStatus.canceled
+            lecture.job.status = JobStatus.canceled
+            lecture.job.stage = JobStage.canceled
+            lecture.job.progress_percent = 0
+            lecture.job.completed_at = lecture.job.completed_at or datetime.utcnow()
+            self._delete_lecture_processing_logs(lecture_id)
+            self.db.commit()
+            self.db.refresh(lecture)
             return lecture
 
         if lecture.job.status not in {JobStatus.pending, JobStatus.running}:
@@ -205,15 +225,11 @@ class LectureService:
         lecture.status = LectureStatus.canceled
         lecture.job.status = JobStatus.canceled
         lecture.job.stage = JobStage.canceled
+        lecture.job.progress_percent = 0
         lecture.job.error_message = None
         lecture.job.completed_at = datetime.utcnow()
         self.db.commit()
-        create_system_log(
-            self.db,
-            "WARNING",
-            CANCEL_MESSAGE,
-            lecture.id,
-            {"action": "cancel"},
-        )
+        self._delete_lecture_processing_logs(lecture_id)
+        self.db.commit()
         self.db.refresh(lecture)
         return lecture

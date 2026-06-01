@@ -148,15 +148,26 @@ class YouTubeService:
 
         return title
 
+    def _temp_file_token(self, lecture_id: Optional[int] = None) -> str:
+        token = uuid.uuid4().hex
+        if lecture_id is None:
+            return token
+
+        return f"lecture_{lecture_id}_{token}"
+
     def download_audio(
         self,
         url: str,
         progress_callback: Optional[ProgressCallback] = None,
+        lecture_id: Optional[int] = None,
     ) -> str:
         """
         Downloads media from a YouTube link and reports progress if requested.
         """
-        output_template = os.path.join(self.download_dir, f"{uuid.uuid4().hex}.%(ext)s")
+        output_template = os.path.join(
+            self.download_dir,
+            f"{self._temp_file_token(lecture_id)}.%(ext)s",
+        )
         out_path = ""
 
         def hook(status: dict) -> None:
@@ -362,8 +373,12 @@ class YouTubeService:
             return self._parse_xml_captions(content)
         return self._parse_vtt_or_srt(content)
 
-    def download_transcript_bundle(self, url: str) -> Optional[dict[str, Any]]:
-        token = uuid.uuid4().hex
+    def download_transcript_bundle(
+        self,
+        url: str,
+        lecture_id: Optional[int] = None,
+    ) -> Optional[dict[str, Any]]:
+        token = self._temp_file_token(lecture_id)
         output_template = os.path.join(self.transcript_dir, token)
         info_dict: dict[str, Any] = {}
         ydl_opts = {
@@ -424,8 +439,15 @@ class YouTubeService:
                 if os.path.exists(subtitle_file):
                     os.remove(subtitle_file)
 
-    def download_transcript(self, url: str) -> Optional[str]:
-        transcript_bundle = self.download_transcript_bundle(url)
+    def download_transcript(
+        self,
+        url: str,
+        lecture_id: Optional[int] = None,
+    ) -> Optional[str]:
+        transcript_bundle = self.download_transcript_bundle(
+            url,
+            lecture_id=lecture_id,
+        )
         if not transcript_bundle:
             return None
 

@@ -305,6 +305,7 @@ export default function NotesLibraryPage() {
   const [lectures, setLectures] = useState<NotesLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -333,6 +334,44 @@ export default function NotesLibraryPage() {
   }, []);
 
   const genreGroups = useMemo(() => groupNotesByGenre(lectures), [lectures]);
+
+  const filteredGenreGroups = useMemo(() => {
+    if (!searchQuery.trim()) return genreGroups;
+
+    const query = searchQuery.toLowerCase();
+    return genreGroups
+      .map((group) => {
+        const categoryMatches = group.category.toLowerCase().includes(query);
+        const matchingLectures = group.lectures.filter((lecture) => {
+          return (
+            lecture.title.toLowerCase().includes(query) ||
+            (lecture.summary && lecture.summary.toLowerCase().includes(query)) ||
+            (lecture.genre_label && lecture.genre_label.toLowerCase().includes(query))
+          );
+        });
+
+        if (categoryMatches) {
+          return group;
+        }
+
+        if (matchingLectures.length > 0) {
+          return {
+            ...group,
+            lectures: matchingLectures,
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean) as GenreGroup[];
+  }, [genreGroups, searchQuery]);
+
+  useEffect(() => {
+    if (searchQuery.trim().length > 0) {
+      const activeCategories = filteredGenreGroups.map((g) => g.category);
+      setOpenGroups(new Set(activeCategories));
+    }
+  }, [searchQuery, filteredGenreGroups]);
 
   const toggleGroup = (category: string) => {
     setOpenGroups((current) => {

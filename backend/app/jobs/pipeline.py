@@ -2,6 +2,7 @@ import concurrent.futures
 import logging
 import os
 from math import ceil
+from pathlib import Path
 from threading import Lock
 from sqlalchemy.orm import Session
 from app.models.job import ProcessingJob, JobStage
@@ -10,7 +11,7 @@ from app.models.media_asset import MediaAsset
 from app.models.transcript import Transcript
 from app.models.note import Note
 from app.models.log import SystemLog
-from app.core.config import load_settings
+from app.core.config import BACKEND_ROOT, load_settings
 from app.services.ai_error_utils import format_exception_for_user
 from app.services.youtube_service import sanitize_terminal_text
 
@@ -33,6 +34,112 @@ list_of_pipeline_stages = [
 class LectureProcessingCanceled(Exception):
     pass
 
+
+TEMP_PROCESSING_DIRS = (
+    "temp_youtube",
+    "temp_youtube_transcripts",
+    "temp_media",
+)
+
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+
+    return True
+
+
+def _resolve_temp_roots() -> list[Path]:
+    roots: list[Path] = []
+
+    for directory_name in TEMP_PROCESSING_DIRS:
+        for candidate in (BACKEND_ROOT / directory_name, Path.cwd() / directory_name):
+            resolved = candidate.resolve()
+            if resolved not in roots:
+                roots.append(resolved)
+
+    return roots
+
+
+def _resolve_existing_temp_path(file_path: str | None, temp_roots: list[Path]) -> Path | None:
+    if not file_path:
+        return None
+
+    raw_path = Path(file_path)
+    candidates = [raw_path] if raw_path.is_absolute() else [BACKEND_ROOT / raw_path, Path.cwd() / raw_path]
+
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if not any(_is_within_directory(resolved, root) for root in temp_roots):
+            continue
+        if resolved.is_file() or resolved.is_symlink():
+            return resolved
+
+    return None
+
+
+def _temp_file_belongs_to_lecture(path: Path, lecture_id: int) -> bool:
+    lecture_prefix = f"{lecture_id}_"
+    youtube_prefix = f"lecture_{lecture_id}_"
+
+    return path.name.startswith(lecture_prefix) or path.name.startswith(youtube_prefix)
+
+
+def _delete_temp_file(path: Path, deleted_paths: set[Path]) -> bool:
+    resolved = path.resolve()
+    if resolved in deleted_paths:
+        return False
+
+    try:
+        if resolved.is_file() or resolved.is_symlink():
+            resolved.unlink()
+            deleted_paths.add(resolved)
+            return True
+    except OSError:
+        logger.warning("Failed to delete temp file %s.", resolved, exc_info=True)
+
+    return False
+
+
+def cleanup_lecture_temp_files(
+    lecture_id: int,
+    explicit_paths: list[str | None] | None = None,
+) -> int:
+    temp_roots = _resolve_temp_roots()
+    deleted_paths: set[Path] = set()
+    deleted_count = 0
+
+    for file_path in explicit_paths or []:
+        resolved_path = _resolve_existing_temp_path(file_path, temp_roots)
+        if resolved_path and _delete_temp_file(resolved_path, deleted_paths):
+            deleted_count += 1
+
+    for temp_root in temp_roots:
+        if not temp_root.is_dir():
+            continue
+
+        for candidate in temp_root.iterdir():
+            if not _temp_file_belongs_to_lecture(candidate, lecture_id):
+                continue
+            if _delete_temp_file(candidate, deleted_paths):
+                deleted_count += 1
+
+    return deleted_count
+
+
+def _is_processing_canceled(db: Session, lecture_id: int) -> bool:
+    job = db.query(ProcessingJob).filter(ProcessingJob.lecture_id == lecture_id).first()
+    lecture = db.query(Lecture).filter(Lecture.id == lecture_id).first()
+
+    return (
+        (job is not None and str(job.status).endswith("canceled"))
+        or (job is not None and str(job.stage).endswith("canceled"))
+        or (lecture is not None and str(lecture.status).endswith("canceled"))
+    )
+
+
 def create_system_log(
     db: Session,
     level: str,
@@ -40,6 +147,9 @@ def create_system_log(
     lecture_id: int,
     metadata: dict | None = None,
 ):
+    if _is_processing_canceled(db, lecture_id):
+        return
+
     cleaned_message = sanitize_terminal_text(message)
     payload = {"lecture_id": lecture_id}
     if metadata:
@@ -156,7 +266,10 @@ def execute_pipeline(db: Session, job: ProcessingJob, lecture_id: int):
             lecture_id,
         )
         try:
-            transcript_bundle = youtube_svc.download_transcript_bundle(lecture.source_url)
+            transcript_bundle = youtube_svc.download_transcript_bundle(
+                lecture.source_url,
+                lecture_id=lecture_id,
+            )
         except Exception as exc:
             create_system_log(
                 db,
@@ -212,6 +325,7 @@ def execute_pipeline(db: Session, job: ProcessingJob, lecture_id: int):
         downloaded_video_path = youtube_svc.download_audio(
             lecture.source_url,
             progress_callback=report_download_progress,
+            lecture_id=lecture_id,
         )
         video_path = downloaded_video_path
         raise_if_canceled(db, job, lecture_id, lecture)
@@ -550,8 +664,15 @@ def execute_pipeline(db: Session, job: ProcessingJob, lecture_id: int):
     db.commit()
     create_system_log(db, "INFO", "Lecture processing completed successfully.", lecture_id)
 
-    # Clean up temp audio if not needed
-    if extracted_audio_path:
-        media_svc.cleanup_file(extracted_audio_path)
-
-    # We intentionally do NOT cleanup downloaded_video_path here so it can be streamed on the dashboard.
+    try:
+        cleanup_lecture_temp_files(
+            lecture_id,
+            explicit_paths=[extracted_audio_path, downloaded_video_path],
+        )
+        logger.info("Cleaned up temp files for lecture %s", lecture_id)
+    except Exception:
+        logger.warning(
+            "Failed to clean up temp files for lecture %s.",
+            lecture_id,
+            exc_info=True,
+        )

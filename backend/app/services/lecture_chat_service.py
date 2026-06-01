@@ -16,9 +16,9 @@ except ImportError:
 
 
 class LectureChatService:
-    RECENT_MESSAGE_LIMIT = 10
-    TRANSCRIPT_CHAR_LIMIT = 14000
-    NOTES_CHAR_LIMIT = 9000
+    RECENT_MESSAGE_LIMIT = 20
+    TRANSCRIPT_CHAR_LIMIT = 60000
+    NOTES_CHAR_LIMIT = 40000
 
     def __init__(self, db: Session):
         self.db = db
@@ -102,6 +102,23 @@ class LectureChatService:
             for message in recent_messages
         ).strip()
 
+        # Extract extra analysis details if available
+        analysis_data = {}
+        if lecture.transcript and lecture.transcript.metadata_json:
+            analysis_data = lecture.transcript.metadata_json.get("analysis") or {}
+
+        genre_label = analysis_data.get("genre_label", "")
+        genre_explanation = analysis_data.get("genre_explanation", "")
+        valuation_summary = analysis_data.get("valuation_summary", "")
+
+        extra_details = ""
+        if genre_label:
+            extra_details += f"Lecture Category/Genre: {genre_label}\n"
+        if genre_explanation:
+            extra_details += f"Category Focus: {genre_explanation}\n"
+        if valuation_summary:
+            extra_details += f"Content Completeness Assessment: {valuation_summary}\n"
+
         return f"""You are a professional study tutor embedded inside a lecture-learning app.
 Help the student answer questions about this specific lecture only.
 
@@ -109,7 +126,10 @@ Rules:
 - Ground your answer in the lecture transcript, Somali notes, and recent conversation.
 - If the student asks something outside the lecture topic, politely say you can help only with this lecture and suggest a related question.
 - Be accurate, supportive, and concise.
-- Use the same language as the student's question when possible. If unclear, prefer Somali.
+- LANGUAGE MATCHING RULE:
+  - If the student writes their question in English, you MUST reply entirely in English.
+  - If the student writes their question in Somali, you MUST reply entirely in Somali.
+  - Match the student's chosen language precisely. Ground your explanations in the provided materials (e.g., explain Somali notes in English if asked in English, or explain them in Somali if asked in Somali).
 - Use short paragraphs or bullet points when they improve clarity.
 - Do not invent facts that are not supported by the provided lecture material.
 - If the lecture material only partially covers the question, say what is covered and what is missing.
@@ -120,6 +140,7 @@ Lecture title:
 Lecture status:
 {lecture.status}
 
+{extra_details}
 Transcript excerpt:
 {transcript_text or "Transcript not available."}
 

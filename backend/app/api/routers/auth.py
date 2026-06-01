@@ -226,6 +226,7 @@ def get_user_activity(
         {
             "id": log.id,
             "action": log.action,
-            "created_at": log.created_at
+            "created_at": log.created_at,
+            "details": log.details
         } for log in logs
     ]
