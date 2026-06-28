@@ -1,3 +1,4 @@
+.inapp-dashboard-shell-container,
 .inapp-dashboard-shell,
 .inapp-dashboard-loading {
   --user-primary: #2a2a72;
@@ -22,6 +23,7 @@
   font-family: var(--font-onest), "Onest", "Segoe UI", system-ui, sans-serif;
 }
 
+.inapp-dashboard-shell-container[data-theme="dark"],
 .inapp-dashboard-shell[data-theme="dark"] {
   --user-bg: #0b1020;
   --user-surface: #111827;
