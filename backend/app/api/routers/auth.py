@@ -205,6 +205,42 @@ def create_new_user(
     return user
 
 
+@router.post("/admin-signup", response_model=User)
+def create_new_admin(
+    *,
+    db: Session = Depends(get_db),
+    user_in: UserCreate,
+) -> Any:
+    """Create new administrator account."""
+    logger.info("Admin signup attempt for email=%s", user_in.email)
+    if len(user_in.password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long."
+        )
+    auth_service = AuthService(db)
+    user = auth_service.get_user_by_email(email=user_in.email)
+    if user:
+        logger.warning("Admin signup rejected because email already exists: %s", user_in.email)
+        raise HTTPException(
+            status_code=400,
+            detail="This email is already registered.",
+        )
+    user = auth_service.create_user(user_in, role=RoleEnum.admin)
+    user.is_email_verified = True
+    db.commit()
+    
+    # Write robust logging for the system and the user
+    sys_log = SystemLog(level="INFO", message=f"New admin registered: {user.email}")
+    act_log = ActivityLog(action="ADMIN_SIGNUP", user_id=user.id, details={"email": user.email})
+    db.add(sys_log)
+    db.add(act_log)
+    db.commit()
+    
+    logger.info("Admin signup success for user_id=%s email=%s", user.id, user.email)
+    return user
+
+
 @router.get("/me", response_model=User)
 def read_user_me(
     current_user: User = Depends(get_current_user),
