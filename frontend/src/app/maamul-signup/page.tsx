@@ -12,12 +12,13 @@ import {
   MdVisibility,
   MdVisibilityOff,
 } from "react-icons/md";
-import { apiUrl, fetchCurrentUser, getErrorMessage } from "@/lib/api";
+import { apiUrl, fetchCurrentUser } from "@/lib/api";
 import { clearSession, persistSession } from "@/lib/session";
 import "../admin-auth.css";
 
-export default function AdminSignInPage() {
+export default function AdminSignUpPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,49 +26,63 @@ export default function AdminSignInPage() {
   const [showPassword, setShowPassword] = useState(false);
   const { theme, setTheme, toggleTheme } = useTheme();
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("expired") === "true") {
-      setError("Session expired due to inactivity. Please sign in again.");
-      router.replace("/maamul-login");
-    }
-  }, [router]);
+
 
 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
     setLoading(true);
     setError(null);
 
     try {
+      const payload = {
+        email,
+        password,
+        full_name: name,
+      };
+
+      const res = await fetch(apiUrl("/api/v1/auth/admin-signup"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errorData = (await res.json()) as { detail?: string };
+        throw new Error(errorData.detail || "Failed to create Admin account.");
+      }
+
       const formData = new URLSearchParams();
       formData.append("username", email);
       formData.append("password", password);
 
-      const res = await fetch(apiUrl("/api/v1/auth/admin-login"), {
+      const loginRes = await fetch(apiUrl("/api/v1/auth/admin-login"), {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData.toString(),
       });
 
-      if (!res.ok) {
-        throw new Error(
-          await getErrorMessage(res, "Failed to sign in as Admin."),
+      if (loginRes.ok) {
+        const loginData = (await loginRes.json()) as { access_token: string };
+        const currentUser = await fetchCurrentUser(loginData.access_token);
+
+        persistSession(loginData.access_token);
+        router.replace(
+          currentUser.role === "admin" ? "/admin/dashboard" : "/dashboard",
         );
+      } else {
+        clearSession();
+        router.replace("/maamul-login");
       }
-
-      const data = (await res.json()) as { access_token: string };
-      const currentUser = await fetchCurrentUser(data.access_token);
-
-      persistSession(data.access_token);
-      router.replace(
-        currentUser.role === "admin" ? "/admin/dashboard" : "/dashboard",
-      );
     } catch (err: unknown) {
       clearSession();
       setError(
-        err instanceof Error ? err.message : "Failed to sign in as Admin.",
+        err instanceof Error ? err.message : "Failed to create Admin account.",
       );
     } finally {
       setLoading(false);
@@ -91,13 +106,24 @@ export default function AdminSignInPage() {
         </div>
 
         <div className="admin-auth-heading">
-          <h1>Welcome Back</h1>
-          <p>Sign in to manage users, lectures, jobs, and platform settings.</p>
+          <h1>Create Account</h1>
+          <p>Create a new administrator account for platform management.</p>
         </div>
 
         {error && <div className="admin-auth-alert">{error}</div>}
 
         <form onSubmit={handleSubmit} className="admin-auth-form">
+          <label>
+            <span>Full Name</span>
+            <input
+              type="text"
+              placeholder="Admin full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
+
           <label>
             <span>Email Address</span>
             <input
@@ -114,7 +140,7 @@ export default function AdminSignInPage() {
             <div className="admin-auth-password">
               <input
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter admin password"
+                placeholder="Create a secure password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -133,22 +159,19 @@ export default function AdminSignInPage() {
             </div>
           </label>
 
-          <div className="admin-auth-row">
-            <label className="admin-auth-check">
-              <input type="checkbox" />
-              <span>Remember me</span>
-            </label>
-            <Link href="/contact">Need help?</Link>
-          </div>
+          <label className="admin-auth-check admin-auth-terms">
+            <input type="checkbox" required />
+            <span>I confirm this account is for authorized admin access.</span>
+          </label>
 
           <button type="submit" className="admin-auth-submit" disabled={loading}>
-            {loading ? "Authenticating..." : "Sign In"}
+            {loading ? "Creating Account..." : "Sign Up"}
           </button>
         </form>
 
         <p className="admin-auth-switch">
-          Don&apos;t have admin access?{" "}
-          <Link href="/maamul-signup">Register here</Link>
+          Already have an admin account?{" "}
+          <Link href="/maamul-login">Sign in here</Link>
         </p>
       </section>
     </main>

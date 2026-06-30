@@ -1,5 +1,5 @@
-temp_youtube/*
-temp_youtube_transcripts/*
-temp_media/*
+__pycache__/
+*.py[cod]
+.venv/
 *.err.log
 *.log

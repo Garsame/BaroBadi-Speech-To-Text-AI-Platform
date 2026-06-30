@@ -9,7 +9,7 @@ from app.models.user import User, RoleEnum
 from app.core.security import get_password_hash
 
 def print_help():
-    print("BaroBadi Admin Management Tool")
+    print("Baro Platform Admin Management Tool")
     print("==============================")
     print("Usage:")
     print("  python manage_admin.py create <email> <password> [<full_name>]")
@@ -117,7 +117,7 @@ def main():
 
         elif action == "list":
             admins = db.query(User).filter(User.role == RoleEnum.admin).all()
-            print("BaroBadi Administrators:")
+            print("Baro Platform Administrators:")
             print("-" * 50)
             if not admins:
                 print("No administrators found.")

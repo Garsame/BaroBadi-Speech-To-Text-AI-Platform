@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM_EMAIL: Optional[str] = None
-    SMTP_FROM_NAME: str = "BaroBadi App"
+    SMTP_FROM_NAME: str = "Baro Platform"
 
     class Config:
         env_file = str(BACKEND_ROOT / ".env")

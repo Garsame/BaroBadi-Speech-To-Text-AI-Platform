@@ -17,7 +17,7 @@ def create_contact_message(
 ) -> Any:
     """
     Submit a new contact message.
-    Saves it to the database and sends an email notification to the BaroBadi team.
+    Saves it to the database and sends an email notification to the Baro Platform team.
     """
     try:
         # Save to database

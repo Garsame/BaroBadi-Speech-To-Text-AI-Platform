@@ -17,7 +17,7 @@ import {
   MdRocketLaunch,
   MdVerified
 } from "react-icons/md";
-import ThemeToggle from "./ThemeToggle";
+import ThemeToggle from "@/components/ThemeToggle";
 import { getSessionToken, clearSession } from "@/lib/session";
 import { fetchCurrentUser, apiUrl, authHeaders, type AuthenticatedUser } from "@/lib/api";
 import OtpVerificationModal from "@/components/OtpVerificationModal";
@@ -432,21 +432,21 @@ export default function PublicHeader() {
         <Link href={user ? "/dashboard" : "/"} className="logo" onClick={closeMenu}>
           <Image
             src="/barobadi-logo.png"
-            alt="BaroBadi Logo"
-            width={140}
-            height={44}
+            alt="Baro Platform Logo"
+            width={180}
+            height={56}
             className="logo-light"
             priority
-            style={{ height: "auto" }}
+            style={{ width: "auto", height: "auto" }}
           />
           <Image
             src="/barobadi-logo-dark.png"
-            alt="BaroBadi Logo"
-            width={140}
-            height={44}
+            alt="Baro Platform Logo"
+            width={180}
+            height={56}
             className="logo-dark"
             priority
-            style={{ height: "auto" }}
+            style={{ width: "auto", height: "auto" }}
           />
         </Link>
 

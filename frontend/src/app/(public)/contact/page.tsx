@@ -2,32 +2,33 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { apiUrl } from "@/lib/api";
 import {
   MdAdminPanelSettings,
+  MdArrowForward,
   MdEmail,
   MdGroups,
   MdSupportAgent,
 } from "react-icons/md";
+import { apiUrl } from "@/lib/api";
 
 const contactReasons = [
   {
     icon: MdSupportAgent,
     title: "Student support",
     description:
-      "Questions about accounts, lecture processing, generated notes, or using your study dashboard.",
+      "Account access, lecture processing, generated notes, quizzes, or dashboard questions.",
   },
   {
     icon: MdGroups,
     title: "Educator interest",
     description:
-      "Ideas for using BaroBadi with recorded classes, course material, or student revision support.",
+      "Using Baro Platform with recorded classes, course material, or revision support.",
   },
   {
     icon: MdAdminPanelSettings,
-    title: "Admin and deployment",
+    title: "System setup",
     description:
-      "Help with system setup, monitoring, user management, and operational questions.",
+      "Deployment, administration, monitoring, and operational support questions.",
   },
 ];
 
@@ -36,19 +37,20 @@ export default function ContactPage() {
   const [email, setEmail] = useState("");
   const [topic, setTopic] = useState("");
   const [message, setMessage] = useState("");
-  
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
+  const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
   const [errorText, setErrorText] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsSubmitting(true);
     setSubmitStatus("idle");
     setErrorText("");
 
     try {
-      const res = await fetch(apiUrl("/api/v1/contact/"), {
+      const response = await fetch(apiUrl("/api/v1/contact/"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -56,7 +58,7 @@ export default function ContactPage() {
         body: JSON.stringify({ name, email, topic, message }),
       });
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error("Failed to send message. Please try again later.");
       }
 
@@ -65,25 +67,26 @@ export default function ContactPage() {
       setEmail("");
       setTopic("");
       setMessage("");
-    } catch (err: any) {
+    } catch (error: unknown) {
       setSubmitStatus("error");
-      setErrorText(err.message || "An unexpected error occurred.");
+      setErrorText(
+        error instanceof Error ? error.message : "An unexpected error occurred.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <>
-      <section className="public-section public-section-soft">
+    <div className="contact-page">
+      <section className="public-section page-hero compact">
         <div className="public-container">
           <div className="section-heading center">
-            <span className="eyebrow">Contact us</span>
-            <h1>Talk to the BaroBadi team.</h1>
+            <span className="section-eyebrow">Contact</span>
+            <h1>Talk to the Baro Platform team.</h1>
             <p>
-              Reach out about learning support, education partnerships, system
-              setup, or feedback that can make the platform more useful for
-              Somali-speaking students.
+              Send a message about support, classroom use, deployment, or ideas
+              that can make lecture revision better for Somali learners.
             </p>
           </div>
         </div>
@@ -91,160 +94,141 @@ export default function ContactPage() {
 
       <section className="public-section">
         <div className="public-container contact-layout">
-          <div className="contact-options">
-            <div className="contact-options-heading">
-              <span className="eyebrow">How we can help</span>
-              <h2>Choose the closest topic.</h2>
+          <aside className="contact-panel" style={{ border: "1px solid var(--public-border)", padding: "32px", borderRadius: "var(--public-radius)", background: "var(--public-surface)", boxShadow: "var(--public-soft-shadow)" }}>
+            <div className="contact-panel-heading">
+              <span className="section-eyebrow" style={{ width: "fit-content" }}>Choose a topic</span>
+              <h2>We will route your message to the right place.</h2>
             </div>
-            {contactReasons.map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <article className="contact-way" key={item.title}>
-                  <span
-                    className={`contact-way-icon ${
-                      index === 1 ? "accent" : ""
-                    }`}
-                  >
-                    <Icon />
-                  </span>
-                  <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.description}</p>
-                  </div>
-                </article>
-              );
-            })}
 
-            <article className="contact-email-line">
-              <span className="contact-way-icon">
-                <MdEmail />
-              </span>
+            <div className="contact-list">
+              {contactReasons.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <article className="contact-item" key={item.title} style={{ borderRadius: "var(--public-radius-sm)" }}>
+                    <span className="contact-icon" style={{ background: "var(--public-soft)", color: "var(--public-primary)", borderRadius: "var(--public-radius-full)" }}>
+                      <Icon />
+                    </span>
+                    <div>
+                      <h3 style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>{item.title}</h3>
+                      <p>{item.description}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="contact-email-card" style={{ borderRadius: "var(--public-radius-sm)", background: "var(--public-soft)", border: "1px solid var(--public-border)", display: "flex", gap: "16px", padding: "20px" }}>
+              <MdEmail aria-hidden="true" style={{ fontSize: "1.5rem", color: "var(--public-primary)", marginTop: "2px" }} />
               <div>
-                <strong>Email</strong>
-                <a href="mailto:hello@barobadi.ai">hello@barobadi.ai</a>
-                <p>
-                  Send questions about support, setup, feedback, or classroom
-                  use and the team can follow up by email.
-                </p>
+                <strong style={{ display: "block", color: "var(--public-text)", fontFamily: "var(--public-font-title)" }}>Email Address</strong>
+                <a href="mailto:hello@baroplatform.ai" style={{ color: "var(--public-primary)", fontWeight: 500 }}>hello@baroplatform.ai</a>
               </div>
-            </article>
-          </div>
+            </div>
+          </aside>
 
-          <div className="form-card">
+          <section className="form-card contact-form-card" aria-label="Contact form" style={{ border: "1px solid var(--public-border)", padding: "40px", borderRadius: "var(--public-radius)", background: "var(--public-surface)", boxShadow: "var(--public-soft-shadow)" }}>
             {submitStatus === "success" ? (
-              <div 
-                style={{
-                  padding: "2.5rem 1.5rem",
-                  textAlign: "center",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: "1.2rem",
-                  animation: "fadeIn 0.4s ease-out forwards"
-                }}
-              >
-                <div
-                  style={{
-                    width: "72px",
-                    height: "72px",
-                    borderRadius: "50%",
-                    background: "rgba(16, 185, 129, 0.15)",
-                    color: "#10b981",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "2rem",
-                    fontWeight: "bold",
-                    boxShadow: "0 8px 20px rgba(16, 185, 129, 0.1)"
-                  }}
-                >
-                  ✓
-                </div>
-                <h2 style={{ fontSize: "1.8rem", margin: 0 }}>Message Sent!</h2>
-                <p style={{ color: "var(--public-muted)", lineHeight: 1.6, margin: 0 }}>
-                  Thank you for reaching out. Your message has been saved in our system and forwarded to the BaroBadi team. We will get back to you by email shortly.
+              <div className="success-state">
+                <span className="success-icon" style={{ background: "var(--public-soft)", color: "var(--public-primary)", borderRadius: "var(--public-radius-full)", width: "64px", height: "64px", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.25rem", fontWeight: "bold" }}>OK</span>
+                <h2>Message sent</h2>
+                <p>
+                  Your message has been saved. The team can follow up through
+                  the email address you provided.
                 </p>
-                <button 
-                  type="button" 
-                  onClick={() => setSubmitStatus("idle")} 
+                <button
+                  type="button"
                   className="public-btn public-btn-primary"
-                  style={{ marginTop: "1rem", width: "auto", paddingInline: "2rem" }}
+                  onClick={() => setSubmitStatus("idle")}
                 >
-                  Send Another Message
+                  Send another message
                 </button>
               </div>
             ) : (
               <>
-                <h2>Send a message</h2>
-                <p>
-                  Share a short note about what you need and how the team can help.
-                </p>
-                <form className="public-form" onSubmit={handleSubmit}>
-                  {submitStatus === "error" && (
-                    <div className="alert alert-error" style={{ marginBottom: "1rem" }}>
-                      {errorText}
-                    </div>
-                  )}
+                <div className="form-heading">
+                  <h2 style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Send a message</h2>
+                  <p>Share a few details and the team will respond by email.</p>
+                </div>
 
+                {submitStatus === "error" && (
+                  <div className="alert alert-error" role="alert">
+                    {errorText}
+                  </div>
+                )}
+
+                <form className="public-form" onSubmit={handleSubmit}>
                   <div className="form-field">
-                    <label>Full Name</label>
+                    <label htmlFor="contact-name" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Full name</label>
                     <input
+                      id="contact-name"
                       name="name"
                       type="text"
+                      autoComplete="name"
                       placeholder="Your full name"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(event) => setName(event.target.value)}
                       required
                     />
                   </div>
+
                   <div className="form-field">
-                    <label>Email Address</label>
+                    <label htmlFor="contact-email" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Email address</label>
                     <input
+                      id="contact-email"
                       name="email"
                       type="email"
+                      autoComplete="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(event) => setEmail(event.target.value)}
                       required
                     />
                   </div>
+
                   <div className="form-field">
-                    <label>Topic</label>
+                    <label htmlFor="contact-topic" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Topic</label>
                     <input
+                      id="contact-topic"
                       name="topic"
                       type="text"
                       placeholder="Support, partnership, or setup"
                       value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
+                      onChange={(event) => setTopic(event.target.value)}
                       required
                     />
                   </div>
+
                   <div className="form-field">
-                    <label>Message</label>
+                    <label htmlFor="contact-message" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Message</label>
                     <textarea
+                      id="contact-message"
                       name="message"
                       placeholder="Tell us what you need help with"
                       value={message}
-                      onChange={(e) => setMessage(e.target.value)}
+                      onChange={(event) => setMessage(event.target.value)}
                       required
                     />
                   </div>
-                  <button 
-                    type="submit" 
+
+                  <button
+                    type="submit"
                     className="public-btn public-btn-primary"
                     disabled={isSubmitting}
+                    style={{ marginTop: "8px" }}
                   >
-                    {isSubmitting ? "Sending..." : "Send Message"}
+                    {isSubmitting ? "Sending..." : "Send message"}
+                    {!isSubmitting && <MdArrowForward aria-hidden="true" />}
                   </button>
                 </form>
+
+                <p className="auth-switch" style={{ marginTop: "24px" }}>
+                  Ready to study? <Link href="/sign-up" style={{ color: "var(--public-primary)", fontWeight: 500 }}>Create an account</Link>
+                </p>
               </>
             )}
-            <p className="auth-switch">
-              Ready to study? <Link href="/sign-up">Create an account</Link>
-            </p>
-          </div>
+          </section>
         </div>
       </section>
-    </>
+    </div>
   );
 }

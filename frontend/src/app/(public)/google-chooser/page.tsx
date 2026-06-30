@@ -71,7 +71,7 @@ export default function GoogleChooserPage() {
               Choose an account
             </h1>
             <p style={{ fontSize: "0.95rem", margin: "0", color: "#474747" }}>
-              to continue to <span style={{ color: "#0b57d0", fontWeight: "500" }}>barobadi.so</span>
+              to continue to <span style={{ color: "#0b57d0", fontWeight: "500" }}>Baro Platform</span>
             </p>
           </div>
 

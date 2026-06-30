@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import {
+  MdArrowForward,
+  MdCheckCircle,
+  MdLibraryBooks,
+  MdOutlineVideoSettings,
+} from "react-icons/md";
 import { apiUrl, getErrorMessage } from "@/lib/api";
-import { MdArrowForward } from "react-icons/md";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -16,32 +20,36 @@ export default function SignUpPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
     if (password.length < 8) {
       setError("Password must be at least 8 characters long.");
       return;
     }
+
     setIsLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const res = await fetch(apiUrl("/api/v1/auth/signup"), {
+      const response = await fetch(apiUrl("/api/v1/auth/signup"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, full_name: fullName }),
       });
 
-      if (!res.ok) {
-        throw new Error(await getErrorMessage(res, "Signup failed"));
+      if (!response.ok) {
+        throw new Error(await getErrorMessage(response, "Signup failed"));
       }
 
       setSuccess("Account created successfully. Redirecting to sign in...");
       router.push("/sign-in?registered=true");
-    } catch (err: unknown) {
+    } catch (caughtError: unknown) {
       setError(
-        err instanceof Error ? err.message : "An unexpected error occurred.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "An unexpected error occurred.",
       );
     } finally {
       setIsLoading(false);
@@ -49,103 +57,81 @@ export default function SignUpPage() {
   };
 
   return (
-    <section className="auth-shell">
-      {/* Centered Logo above the card */}
-      <div className="auth-logo-header" style={{ marginBottom: "2rem", display: "flex", justifyContent: "center" }}>
-        <Link href="/">
-          <Image
-            src="/barobadi-logo.png"
-            alt="BaroBadi Logo"
-            width={160}
-            height={50}
-            className="logo-light"
-            priority
-            style={{ height: "auto" }}
-          />
-          <Image
-            src="/barobadi-logo-dark.png"
-            alt="BaroBadi Logo"
-            width={160}
-            height={50}
-            className="logo-dark"
-            priority
-            style={{ height: "auto" }}
-          />
-        </Link>
-      </div>
-
-      <div className="form-card auth-card" style={{ maxWidth: "480px" }}>
-        <h1 style={{ fontSize: "1.75rem", fontWeight: "800", marginBottom: "0.25rem" }}>Create free account</h1>
-        <p style={{ color: "var(--public-muted)", fontSize: "0.95rem", marginBottom: "1.75rem" }}>
-          Enter your details to open your BaroBadi workspace
-        </p>
-
-        {success && <div className="alert alert-success">{success}</div>}
-        {error && <div className="alert alert-error">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="public-form">
-          <div className="form-field">
-            <label style={{ fontSize: "0.9rem", fontWeight: "700" }}>Full Name</label>
-            <input
-              type="text"
-              placeholder="Your full name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              style={{ borderRadius: "12px", padding: "0.75rem 1rem" }}
-            />
-          </div>
-          <div className="form-field">
-            <label style={{ fontSize: "0.9rem", fontWeight: "700" }}>Email Address</label>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{ borderRadius: "12px", padding: "0.75rem 1rem" }}
-            />
-          </div>
-          <div className="form-field">
-            <label style={{ fontSize: "0.9rem", fontWeight: "700" }}>Password</label>
-            <input
-              type="password"
-              placeholder="Create a strong password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{ borderRadius: "12px", padding: "0.75rem 1rem" }}
-            />
+    <section className="auth-page" style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "75vh" }}>
+      <div className="public-container" style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+        <div className="form-card auth-card" style={{ width: "100%", maxWidth: "480px", border: "1px solid var(--public-border)", padding: "40px", borderRadius: "var(--public-radius)", background: "var(--public-surface)", boxShadow: "var(--public-shadow)" }}>
+          <div className="form-heading">
+            <h2 style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Create account</h2>
+            <p>Enter your details to open a Baro Platform workspace.</p>
           </div>
 
-          <button
-            type="submit"
-            className="public-btn public-btn-primary"
-            disabled={isLoading}
-            style={{
-              borderRadius: "12px",
-              minHeight: "48px",
-              marginTop: "0.5rem",
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              background: "var(--public-primary)",
-              color: "#ffffff"
-            }}
-          >
-            {isLoading ? "Creating account..." : "Sign Up"}
-            {!isLoading && <MdArrowForward size={18} />}
-          </button>
-        </form>
+          {success && (
+            <div className="alert alert-success" role="status">
+              {success}
+            </div>
+          )}
+          {error && (
+            <div className="alert alert-error" role="alert">
+              {error}
+            </div>
+          )}
 
-        <p className="auth-switch" style={{ marginTop: "1.5rem", fontSize: "0.9rem" }}>
-          Already have an account?{" "}
-          <Link href="/sign-in" style={{ fontWeight: "700", color: "var(--public-primary)" }}>
-            Sign in
-          </Link>
-        </p>
+          <form onSubmit={handleSubmit} className="public-form">
+            <div className="form-field">
+              <label htmlFor="signup-name" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Full name</label>
+              <input
+                id="signup-name"
+                type="text"
+                autoComplete="name"
+                placeholder="Your full name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="signup-email" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Email address</label>
+              <input
+                id="signup-email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="signup-password" style={{ fontFamily: "var(--public-font-title)", fontWeight: 500 }}>Password</label>
+              <input
+                id="signup-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Create at least 8 characters"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+              <small>Use at least 8 characters.</small>
+            </div>
+
+            <button
+              type="submit"
+              className="public-btn public-btn-primary"
+              disabled={isLoading}
+              style={{ marginTop: "8px" }}
+            >
+              {isLoading ? "Creating account..." : "Create account"}
+              {!isLoading && <MdArrowForward aria-hidden="true" />}
+            </button>
+          </form>
+
+          <p className="auth-switch" style={{ marginTop: "24px" }}>
+            Already have an account? <Link href="/sign-in" style={{ color: "var(--public-primary)", fontWeight: 500 }}>Sign in</Link>
+          </p>
+        </div>
       </div>
     </section>
   );

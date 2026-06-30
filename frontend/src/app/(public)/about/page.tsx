@@ -1,153 +1,123 @@
+"use client";
+
+import React from "react";
 import Link from "next/link";
 import {
-  MdAnalytics,
   MdAutoFixHigh,
-  MdCollectionsBookmark,
-  MdFactCheck,
-  MdHub,
-  MdLibraryAddCheck,
-  MdManageSearch,
+  MdLibraryBooks,
   MdOutlineVideoSettings,
+  MdSearch,
   MdSmartToy,
-  MdSpaceDashboard,
   MdTextSnippet,
   MdTranslate,
 } from "react-icons/md";
 
-const purposeCards = [
+const principles = [
   {
     icon: MdTranslate,
-    title: "Somali-first learning",
+    title: "Somali-first clarity",
     description:
-      "The platform helps students who understand Somali better than English study complex lectures with clearer local-language material.",
+      "The platform prioritizes readable Somali explanations so students can review difficult lectures with more confidence.",
   },
   {
-    icon: MdAutoFixHigh,
-    title: "Less manual rewriting",
+    icon: MdSearch,
+    title: "Searchable memory",
     description:
-      "Students no longer need to watch, pause, translate, summarize, and organize every lecture by hand.",
-  },
-  {
-    icon: MdCollectionsBookmark,
-    title: "Reusable study library",
-    description:
-      "Processed lectures become searchable study resources with transcripts, notes, summaries, quizzes, and chat history.",
-  },
-];
-
-const pipeline = [
-  { icon: MdFactCheck, title: "Lecture source validation" },
-  {
-    icon: MdOutlineVideoSettings,
-    title: "Media preparation and audio extraction",
-  },
-  { icon: MdTextSnippet, title: "AI transcription or caption capture" },
-  { icon: MdManageSearch, title: "Transcript cleaning and organization" },
-  { icon: MdAutoFixHigh, title: "Somali note generation and repair" },
-  { icon: MdLibraryAddCheck, title: "Lecture analysis, categorization, and saving" },
-];
-
-const capabilities = [
-  {
-    icon: MdSpaceDashboard,
-    title: "Student dashboard",
-    description:
-      "A private space for submitting lectures, monitoring status, opening notes, reviewing transcripts, and taking quizzes.",
+      "Recorded lessons become reusable resources instead of one-time videos buried in a folder or playlist.",
   },
   {
     icon: MdSmartToy,
-    title: "Lecture chatbot",
+    title: "AI that supports study",
     description:
-      "A question-answering layer that helps students revisit completed lecture material without leaving the lecture page.",
+      "Transcription, notes, quizzes, and chat work together around the lecture instead of acting as separate tools.",
+  },
+];
+
+const stages = [
+  { icon: MdOutlineVideoSettings, title: "Prepare media" },
+  { icon: MdTextSnippet, title: "Create transcript" },
+  { icon: MdAutoFixHigh, title: "Generate notes" },
+  { icon: MdLibraryBooks, title: "Save study pack" },
+];
+
+const systemAreas = [
+  {
+    icon: MdLibraryBooks,
+    title: "Learner workspace",
+    description:
+      "A personal, organized hub where you can store all your lecture recordings, generated notes, and study packages.",
   },
   {
-    icon: MdAnalytics,
-    title: "Admin monitoring",
+    icon: MdSmartToy,
+    title: "Interactive AI Chat",
     description:
-      "Operational visibility into users, lectures, jobs, outcomes, logs, and processing health signals.",
+      "Ask questions directly to your lecture slides or transcript, summarize key concepts, and clarify difficult parts instantly.",
   },
   {
-    icon: MdHub,
-    title: "Local development stack",
+    icon: MdTranslate,
+    title: "Smart Somali translation",
     description:
-      "FastAPI, Next.js, SQLite, and Celery work together so the platform can be run and demonstrated locally.",
+      "Struggling with technical terms? Translate complex academic terminology into clear, contextual Somali explanations.",
+  },
+  {
+    icon: MdAutoFixHigh,
+    title: "Auto-generated quizzes",
+    description:
+      "Test your memory with automatically created multiple-choice questions and active recall flashcards.",
   },
 ];
 
 export default function AboutPage() {
   return (
     <div className="about-page">
-      <section className="public-section public-section-soft">
-        <div className="public-container split-section">
-          <div className="section-heading">
-            <span className="eyebrow">About the platform</span>
-            <h1>Built to make lecture revision faster for Somali learners.</h1>
-            <p>
-              BaroBadi is a full-stack AI learning platform that turns
-              YouTube lectures and uploaded lecture files into Somali study
-              material. It combines media processing, transcription, note
-              generation, lecture chat, quizzes, and admin monitoring in one
-              practical system.
+      {/* Section 1: Centered Hero */}
+      <section className="public-section page-hero reveal-up">
+        <div className="public-container about-hero-container">
+          <div className="section-heading center">
+            <span className="section-eyebrow">About Baro Platform</span>
+            <h1 style={{ maxWidth: "780px" }}>Designed for students who study from lectures.</h1>
+            <p style={{ maxWidth: "600px", marginInline: "auto" }}>
+              Baro Platform turns long lecture media into Somali study material that
+              can be searched, reviewed, questioned, and reused.
             </p>
-            <div className="section-actions">
+            <div className="section-actions" style={{ justifyContent: "center" }}>
               <Link href="/sign-up" className="public-btn public-btn-primary">
                 Create Account
               </Link>
               <Link href="/contact" className="public-btn public-btn-ghost">
-                Contact Us
+                Talk to Us
               </Link>
-            </div>
-          </div>
-
-          <div className="panel process-panel">
-            <div className="output-panel-header">
-              <h3>System goal</h3>
-              <span className="output-pill">Education AI</span>
-            </div>
-            <div className="feature-list feature-list-spaced">
-              {pipeline.slice(0, 4).map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div className="feature-row" key={item.title}>
-                    <span className="feature-check">
-                      <Icon />
-                    </span>
-                    <div>
-                      <strong>{item.title}</strong>
-                      <span>Part of the lecture-to-notes workflow.</span>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>
       </section>
 
-      <section className="public-section">
-        <div className="public-container">
-          <div className="section-heading center">
-            <span className="eyebrow">Why it exists</span>
-            <h2>The project solves a real study problem.</h2>
+      {/* Section 2: Principles Card Grid with Numbers */}
+      <section className="public-section public-section-soft">
+        <div className="public-container section-stack">
+          <div className="section-heading center reveal-up">
+            <span className="section-eyebrow">Why it matters</span>
+            <h2>Recorded learning should be easier to return to.</h2>
             <p>
-              Long lecture videos are difficult to revise from quickly,
-              especially when students need written Somali explanations. The
-              platform turns those videos into learning material that is easier
-              to review, search, organize, and reuse.
+              The system reduces the work of replaying, pausing, translating,
+              rewriting, and reorganizing lecture content by creating a
+              structured learning pack.
             </p>
           </div>
-          <div className="purpose-stack">
-            {purposeCards.map((card, index) => {
-              const Icon = card.icon;
+
+          <div className="principles-grid">
+            {principles.map((item, idx) => {
+              const Icon = item.icon;
               return (
-                <article className="purpose-item" key={card.title}>
-                  <span className={`purpose-icon ${index === 1 ? "accent" : ""}`}>
+                <article className={`principle-card reveal-up delay-${idx + 1}`} key={item.title}>
+                  <span className="principle-card-icon">
                     <Icon />
                   </span>
                   <div>
-                    <h3>{card.title}</h3>
-                    <p>{card.description}</p>
+                    <span className="principle-number">PRINCIPLE 0{idx + 1}</span>
+                    <h3>{item.title}</h3>
                   </div>
+                  <p>{item.description}</p>
                 </article>
               );
             })}
@@ -155,62 +125,63 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section className="public-section public-section-soft">
-        <div className="public-container split-section">
-          <div className="pipeline-track-panel">
-            <div className="pipeline-track-header">
-              <h3>Processing pipeline</h3>
-              <span className="output-pill">Tracked stages</span>
-            </div>
-            <ol className="pipeline-track">
-              {pipeline.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <li className="pipeline-stage" key={item.title}>
-                    <span className="pipeline-stage-marker">
-                      <Icon />
-                      <small>{String(index + 1).padStart(2, "0")}</small>
-                    </span>
-                    <div>
-                      <strong>{item.title}</strong>
-                      <span>
-                        The system records progress so users and admins can see
-                        where lecture processing stands.
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+      {/* Section 3: Horizontal Pipeline Node Roadmap */}
+      <section className="public-section">
+        <div className="public-container section-stack">
+          <div className="section-heading center reveal-up">
+            <span className="section-eyebrow">How it works</span>
+            <h2>A practical AI pipeline behind a simple learner experience.</h2>
+            <p>
+              The public pages stay lightweight, while the application tracks
+              lecture sources, processing stages, generated content, and the
+              student workspace behind the scenes.
+            </p>
           </div>
 
-          <div className="section-heading">
-            <span className="eyebrow">How it works</span>
-            <h2>Each lecture moves through a guided AI workflow.</h2>
-            <p>
-              The backend creates lecture and job records, prepares media,
-              captures or generates transcripts, produces Somali notes, analyzes
-              the result, and saves the final study material for the student.
-            </p>
+          <div className="pipeline-roadmap">
+            {stages.map((stage, index) => {
+              const Icon = stage.icon;
+              return (
+                <div className={`pipeline-node reveal-up delay-${index + 1}`} key={stage.title}>
+                  <span className="pipeline-node-num">STAGE 0{index + 1}</span>
+                  <article className="pipeline-card">
+                    <Icon aria-hidden="true" />
+                    <h3>{stage.title}</h3>
+                    <p>
+                      The lecture is analyzed, processed, and structured before transitioning to the next active node.
+                    </p>
+                  </article>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      <section className="public-section">
-        <div className="public-container">
-          <div className="section-heading center">
-            <span className="eyebrow">Inside the system</span>
-            <h2>Designed as a complete learning platform, not a single tool.</h2>
+      {/* Section 4: System Areas side-icon List Card Layout */}
+      <section className="public-section public-section-soft">
+        <div className="public-container about-features-layout">
+          <div className="about-features-hero reveal-left">
+            <span className="section-eyebrow">Inside the platform</span>
+            <h2>More than a transcript generator.</h2>
+            <p>
+              Baro Platform is a complete study workspace designed to automate the heavy lifting of lecture revision, letting you focus on actual learning.
+            </p>
+            <div className="features-hero-card">
+              <h3>Somali-First Learning</h3>
+              <p>Everything is customized for Somali classrooms, helping you understand global curriculum in your local language.</p>
+            </div>
           </div>
-          <div className="capability-matrix">
-            {capabilities.map((item, index) => {
+
+          <div className="about-features-list reveal-right">
+            {systemAreas.map((item, idx) => {
               const Icon = item.icon;
               return (
-                <article className="capability-item" key={item.title}>
-                  <span className={`capability-icon ${index === 1 ? "accent" : ""}`}>
-                    <Icon />
-                  </span>
-                  <div>
+                <article className="about-feature-item" key={item.title}>
+                  <div className="about-feature-icon">
+                    <Icon aria-hidden="true" />
+                  </div>
+                  <div className="about-feature-info">
                     <h3>{item.title}</h3>
                     <p>{item.description}</p>
                   </div>

@@ -13,7 +13,7 @@ const PUBLIC_AUTH_ROUTES = new Set([
   "/sign-in",
   "/sign-up",
   "/maamul-login",
-  "/admin-signup",
+  "/maamul-signup",
 ]);
 
 function isUserRoute(pathname: string): boolean {
@@ -132,6 +132,6 @@ export const config = {
     "/sign-in",
     "/sign-up",
     "/maamul-login",
-    "/admin-signup",
+    "/maamul-signup",
   ],
 };

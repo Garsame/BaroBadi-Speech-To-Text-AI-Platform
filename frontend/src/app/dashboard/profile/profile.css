@@ -1,0 +1,345 @@
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.profile-eyebrow {
+  color: var(--user-accent);
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+
+.profile-hero h1 {
+  color: var(--user-text);
+  font-size: 1.6rem;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.profile-hero p {
+  color: var(--user-muted);
+  font-size: 0.98rem;
+  line-height: 1.7;
+  margin: 0.75rem 0 0;
+  max-width: 580px;
+}
+
+.profile-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(250px, 340px) minmax(0, 1fr);
+}
+
+.profile-card {
+  background: var(--user-surface);
+  border: 1px solid var(--user-border);
+  border-radius: 8px;
+  box-shadow: var(--user-shadow);
+}
+
+.profile-avatar-card {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: 1.4rem;
+  text-align: center;
+}
+
+.profile-avatar-wrap {
+  position: relative;
+}
+
+.profile-avatar {
+  align-items: center;
+  background: var(--user-primary);
+  border: 4px solid var(--user-surface);
+  border-radius: 999px;
+  color: #fff;
+  display: flex;
+  font-size: 2.2rem;
+  font-weight: 900;
+  height: 118px;
+  justify-content: center;
+  overflow: hidden;
+  width: 118px;
+}
+
+.profile-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.profile-avatar-edit,
+.profile-form-edit {
+  align-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.profile-avatar-edit {
+  background: var(--user-accent);
+  border: 3px solid var(--user-surface);
+  bottom: 0.15rem;
+  color: #fff;
+  height: 38px;
+  position: absolute;
+  right: 0.05rem;
+  width: 38px;
+}
+
+.profile-avatar-edit:hover,
+.profile-form-edit:hover {
+  transform: translateY(-2px);
+}
+
+.profile-avatar-card h2 {
+  color: var(--user-text);
+  font-size: 1.15rem;
+  margin: 1rem 0 0.3rem;
+}
+
+.profile-avatar-card p {
+  color: var(--user-muted);
+  font-size: 0.9rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-file-input {
+  display: none;
+}
+
+.profile-avatar-actions {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 1.3rem;
+  width: 100%;
+}
+
+.profile-avatar-actions button,
+.profile-save-button {
+  align-items: center;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 900;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 42px;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.profile-avatar-actions button {
+  background: rgba(0, 159, 253, 0.1);
+  border: 1px solid rgba(0, 159, 253, 0.18);
+  color: var(--user-accent);
+}
+
+.profile-avatar-actions button.is-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: #ef4444;
+}
+
+.profile-avatar-actions button:hover,
+.profile-save-button:hover {
+  transform: translateY(-2px);
+}
+
+.profile-form-card {
+  padding: 1.4rem;
+}
+
+.profile-form-heading {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--user-border);
+  display: flex;
+  gap: 0.85rem;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+  padding-bottom: 1rem;
+}
+
+.profile-form-title {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.85rem;
+}
+
+.profile-form-title > span {
+  align-items: center;
+  background: rgba(0, 159, 253, 0.12);
+  border: 1px solid rgba(0, 159, 253, 0.16);
+  border-radius: 8px;
+  color: var(--user-accent);
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.profile-form-edit {
+  background: rgba(0, 159, 253, 0.1);
+  border: 1px solid rgba(0, 159, 253, 0.18);
+  color: var(--user-accent);
+  flex-shrink: 0;
+  height: 40px;
+  width: 40px;
+}
+
+.profile-form-edit.is-active {
+  background: var(--user-primary);
+  border-color: var(--user-primary);
+  color: #fff;
+}
+
+.profile-form-heading h2 {
+  color: var(--user-text);
+  font-size: 1.14rem;
+  margin: 0;
+}
+
+.profile-form-heading p {
+  color: var(--user-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0.25rem 0 0;
+}
+
+.profile-message {
+  border-radius: 8px;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.profile-message.is-success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+}
+
+.profile-message.is-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-color);
+}
+
+.profile-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.profile-form label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.profile-form label > span {
+  color: var(--user-muted);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.profile-form input {
+  background: var(--user-soft);
+  border: 1px solid var(--user-border);
+  border-radius: 8px;
+  color: var(--user-text);
+  font: inherit;
+  min-height: 44px;
+  outline: none;
+  padding: 0 0.85rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.profile-form input:focus {
+  border-color: var(--user-accent);
+  box-shadow: 0 0 0 3px rgba(0, 159, 253, 0.14);
+}
+
+.profile-form input[readonly] {
+  color: var(--user-muted);
+  cursor: default;
+}
+
+.profile-password-field {
+  position: relative;
+}
+
+.profile-password-field input {
+  padding-right: 3rem;
+  width: 100%;
+}
+
+.profile-password-field button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--user-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+}
+
+.profile-password-field button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.profile-save-button {
+  background: var(--user-primary);
+  border: 1px solid var(--user-primary);
+  color: #fff;
+  margin-top: 0.3rem;
+  width: fit-content;
+  padding: 0 1rem;
+}
+
+.profile-save-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+  transform: none;
+}
+
+@media (max-width: 860px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .profile-avatar-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-save-button {
+    width: 100%;
+  }
+}

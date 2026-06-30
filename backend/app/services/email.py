@@ -16,7 +16,7 @@ def send_otp_email(to_email: str, otp_code: str) -> bool:
     <html>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #121a2d; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h2 style="color: #2a2a72; margin-bottom: 5px; font-size: 24px;">BaroBadi AI</h2>
+          <h2 style="color: #2a2a72; margin-bottom: 5px; font-size: 24px;">Baro Platform</h2>
           <p style="color: #65728a; font-size: 0.95rem; margin-top: 0;">Verify Your Email Address</p>
         </div>
         <div style="background: #f1f5fb; border-radius: 16px; padding: 30px; text-align: center; border: 1px solid #e3e8f2; box-shadow: 0 4px 12px rgba(42, 42, 114, 0.03);">
@@ -27,7 +27,7 @@ def send_otp_email(to_email: str, otp_code: str) -> bool:
           <p style="font-size: 0.85rem; color: #65728a; margin-bottom: 0; line-height: 1.4;">This code will expire in 15 minutes.<br>If you did not request this verification, you can safely ignore this email.</p>
         </div>
         <div style="text-align: center; margin-top: 30px; font-size: 0.8rem; color: #65728a; border-top: 1px solid #e3e8f2; padding-top: 15px;">
-          © {current_year} BaroBadi. All rights reserved.
+          © {current_year} Baro Platform. All rights reserved.
         </div>
       </body>
     </html>
@@ -80,7 +80,7 @@ def send_contact_message_email(name: str, email: str, topic: str, message: str) 
     <html>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #121a2d; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h2 style="color: #2a2a72; margin-bottom: 5px; font-size: 24px;">BaroBadi AI</h2>
+          <h2 style="color: #2a2a72; margin-bottom: 5px; font-size: 24px;">Baro Platform</h2>
           <p style="color: #65728a; font-size: 0.95rem; margin-top: 0;">New User Contact Inquiry</p>
         </div>
         <div style="background: #ffffff; border-radius: 16px; padding: 30px; border: 1px solid #e3e8f2; box-shadow: 0 4px 12px rgba(42, 42, 114, 0.03);">
@@ -115,13 +115,13 @@ def send_contact_message_email(name: str, email: str, topic: str, message: str) 
           </div>
         </div>
         <div style="text-align: center; margin-top: 30px; font-size: 0.8rem; color: #65728a; border-top: 1px solid #e3e8f2; padding-top: 15px;">
-          © {current_year} BaroBadi. All rights reserved.
+          © {current_year} Baro Platform. All rights reserved.
         </div>
       </body>
     </html>
     """
 
-    recipients = ["hello@barobadi.ai"]
+    recipients = ["hello@baroplatform.ai"]
     configured_receiver = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
     if configured_receiver and configured_receiver not in recipients:
         recipients.append(configured_receiver)
@@ -173,14 +173,14 @@ def send_contact_message_email(name: str, email: str, topic: str, message: str) 
 
 
 def send_contact_reply_email(to_email: str, name: str, topic: str, original_message: str, reply_message: str) -> bool:
-    subject = f"Re: {topic} - BaroBadi AI Support"
+    subject = f"Re: {topic} - Baro Platform Support"
     
     current_year = datetime.utcnow().year
     body = f"""
     <html>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #121a2d; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h2 style="color: #2a2a72; margin-bottom: 5px; font-size: 24px;">BaroBadi AI</h2>
+          <h2 style="color: #2a2a72; margin-bottom: 5px; font-size: 24px;">Baro Platform</h2>
           <p style="color: #65728a; font-size: 0.95rem; margin-top: 0;">Support & Contact Reply</p>
         </div>
         <div style="background: #ffffff; border-radius: 16px; padding: 30px; border: 1px solid #e3e8f2; box-shadow: 0 4px 12px rgba(42, 42, 114, 0.03);">
@@ -200,7 +200,7 @@ def send_contact_reply_email(to_email: str, name: str, topic: str, original_mess
           </div>
         </div>
         <div style="text-align: center; margin-top: 30px; font-size: 0.8rem; color: #65728a; border-top: 1px solid #e3e8f2; padding-top: 15px;">
-          © {current_year} BaroBadi. All rights reserved.
+          © {current_year} Baro Platform. All rights reserved.
         </div>
       </body>
     </html>
