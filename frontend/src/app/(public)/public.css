@@ -117,7 +117,7 @@
 .public-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 1000;
   border-bottom: 1px solid var(--public-border);
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(18px);
@@ -1383,21 +1383,24 @@
 
   .public-menu-content {
     position: fixed;
-    inset: 66px 0 0 auto;
+    top: 100%;
+    right: 0;
+    height: calc(100vh - 100%);
     z-index: 60;
     width: min(86vw, 340px);
     max-width: calc(100vw - 24px);
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 16px;
+    padding: 20px 16px;
     border-left: 1px solid var(--public-border);
-    background: var(--user-surface, var(--public-surface, #ffffff)) !important;
+    background: var(--public-surface, #ffffff) !important;
     box-shadow: -18px 0 44px rgba(15, 23, 42, 0.14);
     transform: translateX(100%);
     visibility: hidden;
     pointer-events: none;
     transition: transform 0.22s ease, visibility 0.22s ease;
+    overflow-y: auto;
   }
 
   .header-container.menu-open .public-menu-content {
