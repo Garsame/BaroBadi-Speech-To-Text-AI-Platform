@@ -74,6 +74,7 @@ export default function PublicHeader() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMobileNotifications, setShowMobileNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
   const [isSendingVerification, setIsSendingVerification] = useState(false);
@@ -151,13 +152,19 @@ export default function PublicHeader() {
   };
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowProfile(false);
         setShowNotifications(false);
       }
 
       const target = event.target as Node;
+      
+      const toolsElement = document.querySelector(".mobile-header-tools");
+      if (toolsElement && !toolsElement.contains(target)) {
+        setShowMobileNotifications(false);
+      }
+
       const clickedToggle = mobileToggleRef.current && mobileToggleRef.current.contains(target);
       const clickedMenu = mobileMenuRef.current && mobileMenuRef.current.contains(target);
 
@@ -167,7 +174,11 @@ export default function PublicHeader() {
     }
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -451,6 +462,79 @@ export default function PublicHeader() {
         </Link>
 
         <div className="mobile-header-tools">
+          {user && (
+            <div className="header-popover-wrap mobile-notifications-wrap">
+              <button
+                className="header-icon-button"
+                onClick={() => {
+                  setShowMobileNotifications(!showMobileNotifications);
+                  setIsMenuOpen(false);
+                }}
+                aria-label="Show notifications"
+                title="Notifications"
+              >
+                <MdNotifications />
+                {notifications.length > 0 && <span className="header-unread-dot" />}
+              </button>
+
+              {showMobileNotifications && (
+                <div className="header-dropdown mobile-notifications-dropdown">
+                  <div className="header-dropdown-heading">
+                    <span>Recent Activity</span>
+                    <span>{notifications.length} updates</span>
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="header-dropdown-empty">No recent activity.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", maxHeight: "280px", overflowY: "auto" }}>
+                      {notifications.map((notification) => {
+                        const item = getNotificationView(notification);
+                        const Icon = item.Icon;
+                        const isVerifyNotif = notification.action === "EMAIL_VERIFICATION_REQUIRED";
+
+                        return (
+                          <div 
+                            className="header-notif-item" 
+                            key={notification.id}
+                            onClick={isVerifyNotif ? () => { handleVerifyEmail(); setShowMobileNotifications(false); } : undefined}
+                            style={{ cursor: isVerifyNotif ? "pointer" : "default" }}
+                          >
+                            <span className={`header-notif-icon ${item.tone}`}>
+                              <Icon />
+                            </span>
+                            <div className="header-notif-content">
+                              <strong>{item.title}</strong>
+                              {item.description && <p>{item.description}</p>}
+                              {isVerifyNotif && (
+                                <button
+                                  type="button"
+                                  style={{
+                                    background: "var(--public-primary)",
+                                    color: "#ffffff",
+                                    border: "none",
+                                    borderRadius: "4px",
+                                    padding: "4px 10px",
+                                    fontWeight: "bold",
+                                    fontSize: "0.75rem",
+                                    marginTop: "6px",
+                                    cursor: "pointer",
+                                    alignSelf: "flex-start"
+                                  }}
+                                >
+                                  Verify Now
+                                </button>
+                              )}
+                              {!isVerifyNotif && <small>{new Date(notification.created_at).toLocaleDateString()}</small>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <ThemeToggle />
           <button
             ref={mobileToggleRef}
@@ -461,7 +545,10 @@ export default function PublicHeader() {
             aria-label={
               isMenuOpen ? "Close navigation menu" : "Open navigation menu"
             }
-            onClick={() => setIsMenuOpen((current) => !current)}
+            onClick={() => {
+              setIsMenuOpen((current) => !current);
+              setShowMobileNotifications(false);
+            }}
           >
             {isMenuOpen ? <MdClose /> : <MdMenu />}
           </button>
@@ -492,134 +579,163 @@ export default function PublicHeader() {
 
             {user ? (
               /* Authenticated actions */
-              <div className="header-auth-actions">
-                {/* Notifications Bell */}
-                <div className="header-popover-wrap">
-                  <button
-                    className="header-icon-button"
-                    onClick={() => {
-                      setShowNotifications(!showNotifications);
-                      setShowProfile(false);
-                    }}
-                    aria-label="Show notifications"
-                    title="Notifications"
-                  >
-                    <MdNotifications />
-                    {notifications.length > 0 && <span className="header-unread-dot" />}
-                  </button>
+              <>
+                <div className="header-auth-actions desktop-only">
+                  {/* Notifications Bell */}
+                  <div className="header-popover-wrap">
+                    <button
+                      className="header-icon-button"
+                      onClick={() => {
+                        setShowNotifications(!showNotifications);
+                        setShowProfile(false);
+                      }}
+                      aria-label="Show notifications"
+                      title="Notifications"
+                    >
+                      <MdNotifications />
+                      {notifications.length > 0 && <span className="header-unread-dot" />}
+                    </button>
 
-                  {showNotifications && (
-                    <div className="header-dropdown">
-                      <div className="header-dropdown-heading">
-                        <span>Recent Activity</span>
-                        <span>{notifications.length} updates</span>
-                      </div>
-                      {notifications.length === 0 ? (
-                        <p className="header-dropdown-empty">No recent activity.</p>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", maxHeight: "280px", overflowY: "auto" }}>
-                          {notifications.map((notification) => {
-                            const item = getNotificationView(notification);
-                            const Icon = item.Icon;
-                            const isVerifyNotif = notification.action === "EMAIL_VERIFICATION_REQUIRED";
-
-                            return (
-                              <div 
-                                className="header-notif-item" 
-                                key={notification.id}
-                                onClick={isVerifyNotif ? handleVerifyEmail : undefined}
-                                style={{ cursor: isVerifyNotif ? "pointer" : "default" }}
-                              >
-                                <span className={`header-notif-icon ${item.tone}`}>
-                                  <Icon />
-                                </span>
-                                <div className="header-notif-content">
-                                  <strong>{item.title}</strong>
-                                  {item.description && <p>{item.description}</p>}
-                                  {isVerifyNotif && (
-                                    <button
-                                      type="button"
-                                      style={{
-                                        background: "var(--public-primary)",
-                                        color: "#ffffff",
-                                        border: "none",
-                                        borderRadius: "4px",
-                                        padding: "4px 10px",
-                                        fontWeight: "bold",
-                                        fontSize: "0.75rem",
-                                        marginTop: "6px",
-                                        cursor: "pointer",
-                                        alignSelf: "flex-start"
-                                      }}
-                                    >
-                                      Verify Now
-                                    </button>
-                                  )}
-                                  {!isVerifyNotif && <small>{new Date(notification.created_at).toLocaleDateString()}</small>}
-                                </div>
-                              </div>
-                            );
-                          })}
+                    {showNotifications && (
+                      <div className="header-dropdown">
+                        <div className="header-dropdown-heading">
+                          <span>Recent Activity</span>
+                          <span>{notifications.length} updates</span>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        {notifications.length === 0 ? (
+                          <p className="header-dropdown-empty">No recent activity.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", maxHeight: "280px", overflowY: "auto" }}>
+                            {notifications.map((notification) => {
+                              const item = getNotificationView(notification);
+                              const Icon = item.Icon;
+                              const isVerifyNotif = notification.action === "EMAIL_VERIFICATION_REQUIRED";
 
-                {/* Profile Trigger */}
-                <div className="header-popover-wrap">
-                  <button
-                    className="header-profile-trigger"
-                    onClick={() => {
-                      setShowProfile(!showProfile);
-                      setShowNotifications(false);
-                    }}
-                    aria-label="Show profile menu"
-                  >
-                    <span className="header-avatar">
-                      {profileImageUrl ? (
-                        <img src={profileImageUrl} alt="Profile" referrerPolicy="no-referrer" />
-                      ) : (
-                        getInitials(user.full_name)
-                      )}
-                    </span>
-                    <span className="header-profile-name" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                      {user.full_name}
-                      {user.is_email_verified && (
-                        <MdVerified style={{ color: "#1d9bf0", flexShrink: 0 }} size={16} title="Verified Email" />
-                      )}
-                    </span>
-                    <MdKeyboardArrowDown />
-                  </button>
-
-                  {showProfile && (
-                    <div className="header-dropdown" style={{ width: "240px" }}>
-                      <div className="header-profile-summary">
-                        <span className="header-avatar" style={{ width: "48px", height: "48px", fontSize: "1.1rem" }}>
-                          {profileImageUrl ? (
-                            <img src={profileImageUrl} alt="Profile" referrerPolicy="no-referrer" />
-                          ) : (
-                            getInitials(user.full_name)
-                          )}
-                        </span>
-                        <strong style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "center" }}>
-                          {user.full_name}
-                          {user.is_email_verified && (
-                            <MdVerified style={{ color: "#1d9bf0", flexShrink: 0 }} size={16} title="Verified Email" />
-                          )}
-                        </strong>
-                        <small>{user.email}</small>
+                              return (
+                                <div 
+                                  className="header-notif-item" 
+                                  key={notification.id}
+                                  onClick={isVerifyNotif ? handleVerifyEmail : undefined}
+                                  style={{ cursor: isVerifyNotif ? "pointer" : "default" }}
+                                >
+                                  <span className={`header-notif-icon ${item.tone}`}>
+                                    <Icon />
+                                  </span>
+                                  <div className="header-notif-content">
+                                    <strong>{item.title}</strong>
+                                    {item.description && <p>{item.description}</p>}
+                                    {isVerifyNotif && (
+                                      <button
+                                        type="button"
+                                        style={{
+                                          background: "var(--public-primary)",
+                                          color: "#ffffff",
+                                          border: "none",
+                                          borderRadius: "4px",
+                                          padding: "4px 10px",
+                                          fontWeight: "bold",
+                                          fontSize: "0.75rem",
+                                          marginTop: "6px",
+                                          cursor: "pointer",
+                                          alignSelf: "flex-start"
+                                        }}
+                                      >
+                                        Verify Now
+                                      </button>
+                                    )}
+                                    {!isVerifyNotif && <small>{new Date(notification.created_at).toLocaleDateString()}</small>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <Link href="/dashboard/profile" className="header-profile-link" onClick={() => setShowProfile(false)}>
-                        <MdSettings /> Profile Settings
-                      </Link>
-                      <button onClick={handleLogout} className="header-profile-btn">
-                        <MdLogout /> Sign Out
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
+
+                  {/* Profile Trigger */}
+                  <div className="header-popover-wrap">
+                    <button
+                      className="header-profile-trigger"
+                      onClick={() => {
+                        setShowProfile(!showProfile);
+                        setShowNotifications(false);
+                      }}
+                      aria-label="Show profile menu"
+                    >
+                      <span className="header-avatar">
+                        {profileImageUrl ? (
+                          <img src={profileImageUrl} alt="Profile" referrerPolicy="no-referrer" />
+                        ) : (
+                          getInitials(user.full_name)
+                        )}
+                      </span>
+                      <span className="header-profile-name" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        {user.full_name}
+                        {user.is_email_verified && (
+                          <MdVerified style={{ color: "#1d9bf0", flexShrink: 0 }} size={16} title="Verified Email" />
+                        )}
+                      </span>
+                      <MdKeyboardArrowDown />
+                    </button>
+
+                    {showProfile && (
+                      <div className="header-dropdown" style={{ width: "240px" }}>
+                        <div className="header-profile-summary">
+                          <span className="header-avatar" style={{ width: "48px", height: "48px", fontSize: "1.1rem" }}>
+                            {profileImageUrl ? (
+                              <img src={profileImageUrl} alt="Profile" referrerPolicy="no-referrer" />
+                            ) : (
+                              getInitials(user.full_name)
+                            )}
+                          </span>
+                          <strong style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "center" }}>
+                            {user.full_name}
+                            {user.is_email_verified && (
+                              <MdVerified style={{ color: "#1d9bf0", flexShrink: 0 }} size={16} title="Verified Email" />
+                            )}
+                          </strong>
+                          <small>{user.email}</small>
+                        </div>
+                        <Link href="/dashboard/profile" className="header-profile-link" onClick={() => setShowProfile(false)}>
+                          <MdSettings /> Profile Settings
+                        </Link>
+                        <button onClick={handleLogout} className="header-profile-btn">
+                          <MdLogout /> Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+
+                <div className="header-auth-actions mobile-only">
+                  <div className="mobile-user-row">
+                    <div className="mobile-user-info">
+                      <span className="header-avatar">
+                        {profileImageUrl ? (
+                          <img src={profileImageUrl} alt="Profile" referrerPolicy="no-referrer" />
+                        ) : (
+                          getInitials(user.full_name)
+                        )}
+                      </span>
+                      <span className="header-profile-name" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        {user.full_name}
+                        {user.is_email_verified && (
+                          <MdVerified style={{ color: "#1d9bf0", flexShrink: 0 }} size={16} title="Verified Email" />
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => { handleLogout(); closeMenu(); }} 
+                    className="mobile-signout-btn"
+                  >
+                    <MdLogout /> Sign Out
+                  </button>
+                </div>
+              </>
             ) : (
               /* Unauthenticated actions - Hides Sign Up */
               <>

@@ -223,6 +223,7 @@
   background: var(--public-surface);
   cursor: pointer;
   transition: all 0.2s ease;
+  flex-shrink: 0 !important;
 }
 
 .theme-toggle:hover,
@@ -2015,5 +2016,91 @@
 @media (max-width: 576px) {
   .pipeline-roadmap {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile-only and Desktop-only displays */
+.desktop-only {
+  display: flex !important;
+}
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 820px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+    flex-direction: column;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .mobile-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 4px;
+    border-top: 1px solid var(--public-border);
+    margin-top: 8px;
+  }
+
+  .mobile-user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobile-signout-btn {
+    width: 100%;
+    justify-content: center;
+    background: var(--public-border, rgba(42, 42, 114, 0.05));
+    border: 1px solid var(--public-border);
+    color: #ef4444 !important;
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+  }
+
+  .mobile-signout-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444 !important;
+  }
+
+  .mobile-header-tools {
+    gap: 12px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .mobile-notifications-wrap {
+    position: static !important;
+  }
+
+  .mobile-notifications-dropdown {
+    position: absolute !important;
+    top: calc(100% - 6px);
+    right: 16px;
+    left: 16px;
+    width: auto !important;
+    max-width: none !important;
+    z-index: 1000;
+    margin-top: 0 !important;
+    background: var(--public-surface, #ffffff) !important;
+    border: 1px solid var(--public-border) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16) !important;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
   }
 }
