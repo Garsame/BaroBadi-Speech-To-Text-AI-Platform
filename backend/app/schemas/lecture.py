@@ -78,3 +78,13 @@ class LectureDetail(Lecture):
     transcript: Optional[TranscriptDetail] = None
     notes: Optional[NoteDetail] = None
     media_asset: Optional[MediaAssetDetail] = None
+
+
+class LectureUpdateCategoryRequest(BaseModel):
+    subject_category: str
+
+
+class CategoryRenameRequest(BaseModel):
+    old_category: str
+    new_category: str
+

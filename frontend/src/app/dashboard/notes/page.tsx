@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
+import { MdCreateNewFolder, MdEdit, MdCheck, MdClose } from "react-icons/md";
 import { apiUrl, authHeaders } from "@/lib/api";
 
 type NotesLibraryItem = {
@@ -248,8 +249,7 @@ function getLatestDate(lecture: NotesLibraryItem): string {
 
 function resolveCategory(lecture: NotesLibraryItem): string {
   const subjectCategory = (lecture.subject_category || "").trim();
-  const knownCategory = categoryRules.some((rule) => rule.category === subjectCategory);
-  if (knownCategory || subjectCategory === "Other Subjects") {
+  if (subjectCategory) {
     return subjectCategory;
   }
 
@@ -308,33 +308,77 @@ export default function NotesLibraryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
+  const [emptyCategories, setEmptyCategories] = useState<string[]>([]);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryValue, setEditCategoryValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newLibraryName, setNewLibraryName] = useState("");
+
+
+  // Load empty categories from LocalStorage
   useEffect(() => {
-    const fetchNotesLibrary = async () => {
+    const saved = localStorage.getItem("empty-categories-user");
+    if (saved) {
       try {
-        const response = await fetch(apiUrl("/api/v1/lectures/notes-library"), {
-          headers: authHeaders(),
-          cache: "no-store",
-        });
+        setEmptyCategories(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
 
-        if (!response.ok) {
-          throw new Error("Failed to load generated notes.");
-        }
+  const fetchNotesLibrary = async () => {
+    try {
+      const response = await fetch(apiUrl("/api/v1/lectures/notes-library"), {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
 
-        const data = (await response.json()) as NotesLibraryItem[];
-        setLectures(data);
-        setOpenGroups(new Set(groupNotesByGenre(data).slice(0, 3).map((group) => group.category)));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load generated notes.");
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error("Failed to load generated notes.");
       }
-    };
 
+      const data = (await response.json()) as NotesLibraryItem[];
+      setLectures(data);
+      if (openGroups.size === 0) {
+        setOpenGroups(new Set(groupNotesByGenre(data).slice(0, 3).map((group) => group.category)));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load generated notes.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     void fetchNotesLibrary();
   }, []);
 
-  const genreGroups = useMemo(() => groupNotesByGenre(lectures), [lectures]);
+  // Merges real DB categories with empty custom ones
+  const genreGroups = useMemo(() => {
+    const dbGroups = groupNotesByGenre(lectures);
+    const dbCategoryNames = new Set(dbGroups.map((g) => g.category));
 
+    // Filter out empty categories that now have lectures
+    const activeEmpty = emptyCategories.filter((cat) => !dbCategoryNames.has(cat));
+    if (activeEmpty.length !== emptyCategories.length) {
+      localStorage.setItem("empty-categories-user", JSON.stringify(activeEmpty));
+      setTimeout(() => setEmptyCategories(activeEmpty), 0);
+    }
+
+    const emptyGroups: GenreGroup[] = activeEmpty.map((cat) => ({
+      category: cat,
+      lectures: [],
+      latestAt: new Date(0).toISOString(),
+    }));
+
+    return [...dbGroups, ...emptyGroups].sort((a, b) => {
+      if (a.lectures.length === 0 && b.lectures.length > 0) return 1;
+      if (b.lectures.length === 0 && a.lectures.length > 0) return -1;
+      return new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime();
+    });
+  }, [lectures, emptyCategories]);
+
+  // Filter categories by search query
   const filteredGenreGroups = useMemo(() => {
     if (!searchQuery.trim()) return genreGroups;
 
@@ -384,6 +428,143 @@ export default function NotesLibraryPage() {
       return next;
     });
   };
+
+  // Rename category handler
+  const handleRenameCategory = async (oldCategory: string) => {
+    const trimmed = editCategoryValue.trim();
+    if (!trimmed) {
+      alert("Category name cannot be empty.");
+      return;
+    }
+    if (trimmed === oldCategory) {
+      setEditingCategory(null);
+      return;
+    }
+
+    setRenaming(true);
+    try {
+      const response = await fetch(apiUrl("/api/v1/lectures/notes-library/rename-category"), {
+        method: "POST",
+        headers: authHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          old_category: oldCategory,
+          new_category: trimmed,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to rename category on backend.");
+      }
+
+      // Update local state optimistically
+      setLectures((prev) =>
+        prev.map((l) => {
+          if (l.subject_category === oldCategory) {
+            return { ...l, subject_category: trimmed };
+          }
+          return l;
+        })
+      );
+
+      // Update empty categories list
+      setEmptyCategories((prev) => {
+        const next = prev.map((cat) => (cat === oldCategory ? trimmed : cat));
+        localStorage.setItem("empty-categories-user", JSON.stringify(next));
+        return next;
+      });
+
+      // Update open groups set
+      setOpenGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(oldCategory)) {
+          next.delete(oldCategory);
+          next.add(trimmed);
+        }
+        return next;
+      });
+
+      setEditingCategory(null);
+    } catch (err) {
+      console.error(err);
+      alert("Error renaming library category.");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  // Move lecture category handler
+  const handleMoveLecture = async (lectureId: number, oldCategory: string, targetCategory: string) => {
+    if (targetCategory === oldCategory) return;
+
+    try {
+      const response = await fetch(apiUrl(`/api/v1/lectures/${lectureId}/subject-category`), {
+        method: "PATCH",
+        headers: authHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          subject_category: targetCategory,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to move lecture category.");
+      }
+
+      // Update local state optimistically
+      setLectures((prev) =>
+        prev.map((l) => (l.id === lectureId ? { ...l, subject_category: targetCategory } : l))
+      );
+
+      // Expand the destination group automatically
+      setOpenGroups((prev) => {
+        const next = new Set(prev);
+        next.add(targetCategory);
+        return next;
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Error moving lecture to target category.");
+    }
+  };
+
+  // Create empty library handler
+  const handleCreateEmptyLibrary = () => {
+    setShowCreateModal(true);
+  };
+
+  // Confirm creation from Modal
+  const handleCreateLibraryConfirm = () => {
+    const trimmed = newLibraryName.trim();
+    if (!trimmed) {
+      alert("Category name cannot be empty.");
+      return;
+    }
+
+    const exists = genreGroups.some((g) => g.category.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      alert("Maktabaddan mar hore ayay jirtay (This library already exists).");
+      return;
+    }
+
+    setEmptyCategories((prev) => {
+      const next = [...prev, trimmed];
+      localStorage.setItem("empty-categories-user", JSON.stringify(next));
+      return next;
+    });
+
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      next.add(trimmed);
+      return next;
+    });
+
+    setShowCreateModal(false);
+    setNewLibraryName("");
+  };
+
 
   return (
     <div>
@@ -461,11 +642,13 @@ export default function NotesLibraryPage() {
 
         .notes-library-row-footer {
           display: flex;
-          justify-content: flex-end;
+          justify-content: space-between;
           align-items: center;
           margin-top: 0.25rem;
           border-top: 1px dashed var(--border-color);
           padding-top: 0.75rem;
+          flex-wrap: wrap;
+          gap: 0.75rem;
         }
 
         .notes-library-row-footer-actions {
@@ -478,12 +661,241 @@ export default function NotesLibraryPage() {
           font-weight: 600;
           font-size: 0.9rem;
         }
+
+        .notes-library-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .notes-library-create-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+          background: var(--user-primary-soft, rgba(42, 42, 114, 0.08));
+          border: 1px solid var(--border-color);
+          color: var(--primary-color);
+          border-radius: 8px;
+          padding: 8px 16px;
+          font-size: 0.85rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .notes-library-create-btn:hover {
+          background: var(--primary-color);
+          color: #fff;
+          transform: translateY(-1px);
+        }
+
+        .notes-library-edit-title-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          border-radius: 4px;
+          transition: background-color 0.2s, color 0.2s;
+          margin-left: 0.5rem;
+        }
+
+        .notes-library-edit-title-btn:hover {
+          background-color: var(--border-color);
+          color: var(--primary-hover);
+        }
+
+        .notes-library-edit-title-form {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+          max-width: 400px;
+        }
+
+        .notes-library-edit-title-input {
+          flex: 1;
+          min-width: 150px;
+          border: 1px solid var(--primary-hover);
+          border-radius: 6px;
+          padding: 4px 8px;
+          font: inherit;
+          font-size: 1rem;
+          font-weight: bold;
+          outline: none;
+          color: var(--text-color);
+          background: var(--bg-color);
+        }
+
+        .notes-library-title-control-btn {
+          border: none;
+          background: none;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          color: #fff;
+          transition: opacity 0.2s;
+        }
+
+        .notes-library-title-control-btn.save {
+          background-color: #10b981;
+        }
+
+        .notes-library-title-control-btn.cancel {
+          background-color: #ef4444;
+        }
+
+        .notes-library-title-control-btn:hover {
+          opacity: 0.85;
+        }
+
+        .notes-library-move-wrap {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          font-size: 0.85rem;
+        }
+
+        .notes-library-move-label {
+          color: var(--text-muted);
+          font-weight: 500;
+        }
+
+        .notes-library-move-select {
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 0.85rem;
+          color: var(--text-color);
+          background: var(--bg-color);
+          outline: none;
+          cursor: pointer;
+          transition: border-color 0.2s;
+          max-width: 180px;
+          font-weight: 600;
+        }
+
+        .notes-library-move-select:hover {
+          border-color: var(--primary-hover);
+        }
+
+        .notes-library-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.45);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          animation: notes-fade-in 0.2s ease-out;
+        }
+
+        .notes-library-modal-card {
+          background: var(--bg-color);
+          border: 1px solid var(--border-color);
+          border-radius: 16px;
+          padding: 1.5rem;
+          width: min(420px, calc(100% - 32px));
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          animation: notes-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes notes-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes notes-slide-up {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        .notes-library-modal-card h3 {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: var(--text-color);
+        }
+
+        .notes-library-modal-card p {
+          margin: 0;
+          font-size: 0.92rem;
+          color: var(--text-muted);
+          line-height: 1.5;
+        }
+
+        .notes-library-modal-input {
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          padding: 10px 12px;
+          font-size: 0.95rem;
+          outline: none;
+          color: var(--text-color);
+          background: var(--bg-color);
+          transition: border-color 0.2s;
+        }
+
+        .notes-library-modal-input:focus {
+          border-color: var(--primary-hover);
+        }
+
+        .notes-library-modal-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 0.75rem;
+          margin-top: 0.5rem;
+        }
+
+        .notes-library-modal-btn {
+          border: none;
+          border-radius: 8px;
+          padding: 8px 16px;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 0.2s;
+        }
+
+        .notes-library-modal-btn.save {
+          background-color: var(--primary-color);
+          color: #fff;
+        }
+
+        .notes-library-modal-btn.cancel {
+          background-color: var(--border-color);
+          color: var(--text-color);
+        }
+
+        .notes-library-modal-btn:hover {
+          opacity: 0.9;
+        }
       `}</style>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ margin: 0 }}>Notes Library</h1>
-        <p style={{ marginTop: "0.75rem", opacity: 0.8, maxWidth: "65ch" }}>
-          Generated notes organized by the AI genre assigned during lecture processing.
-        </p>
+      <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Notes Library</h1>
+          <p style={{ marginTop: "0.75rem", opacity: 0.8, maxWidth: "65ch" }}>
+            Generated notes organized by the AI genre assigned during lecture processing.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleCreateEmptyLibrary}
+          className="notes-library-create-btn"
+        >
+          <MdCreateNewFolder size={18} />
+          Abuur Maktabad (Create Library)
+        </button>
       </div>
 
       {loading ? (
@@ -506,7 +918,7 @@ export default function NotesLibraryPage() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {genreGroups.map((group) => {
+          {filteredGenreGroups.map((group) => {
             const isOpen = openGroups.has(group.category);
 
             return (
@@ -533,12 +945,58 @@ export default function NotesLibraryPage() {
                     textAlign: "left",
                   }}
                 >
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontWeight: 900, fontSize: "1.08rem" }}>
-                      {group.category}
-                    </span>
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                      {group.lectures.length} lecture{group.lectures.length === 1 ? "" : "s"} | Latest {formatDate(group.latestAt)}
+                  <span style={{ minWidth: 0, flex: 1 }} onClick={(e) => e.stopPropagation()}>
+                    {editingCategory === group.category ? (
+                      <div className="notes-library-edit-title-form">
+                        <input
+                          type="text"
+                          className="notes-library-edit-title-input"
+                          value={editCategoryValue}
+                          onChange={(e) => setEditCategoryValue(e.target.value)}
+                          disabled={renaming}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="notes-library-title-control-btn save"
+                          onClick={() => handleRenameCategory(group.category)}
+                          disabled={renaming}
+                          title="Save"
+                        >
+                          <MdCheck size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          className="notes-library-title-control-btn cancel"
+                          onClick={() => setEditingCategory(null)}
+                          disabled={renaming}
+                          title="Cancel"
+                        >
+                          <MdClose size={18} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{ fontWeight: 900, fontSize: "1.08rem" }}>
+                          {group.category}
+                        </span>
+                        <button
+                          type="button"
+                          className="notes-library-edit-title-btn"
+                          title="Rename Category"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCategory(group.category);
+                            setEditCategoryValue(group.category);
+                          }}
+                        >
+                          <MdEdit size={15} />
+                        </button>
+                      </span>
+                    )}
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.9rem", display: "block", marginTop: "2px" }}>
+                      {group.lectures.length} lecture{group.lectures.length === 1 ? "" : "s"}
+                      {group.lectures.length > 0 && ` | Latest ${formatDate(group.latestAt)}`}
                     </span>
                   </span>
                   <span
@@ -559,60 +1017,123 @@ export default function NotesLibraryPage() {
 
                 {isOpen && (
                   <div className="notes-library-lecture-list">
-                    {group.lectures.map((lecture) => {
-                      const keyPoints = lecture.key_points?.slice(0, 2) || [];
+                    {group.lectures.length === 0 ? (
+                      <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.92rem", fontStyle: "italic" }}>
+                        Maktabaddani waa maran tahay. Ka soo wareeji casharrada kale adoo adeegsanaya badhanka "Move". (This library is empty. Move lectures here using the "Move" dropdown.)
+                      </div>
+                    ) : (
+                      group.lectures.map((lecture) => {
+                        const keyPoints = lecture.key_points?.slice(0, 2) || [];
 
-                      return (
-                        <article
-                          key={lecture.id}
-                          className="notes-library-row"
-                        >
-                          <div className="notes-library-row-header">
-                            <div className="notes-library-row-genre">
-                              {lecture.genre_label || "Uncategorized"}
+                        return (
+                          <article
+                            key={lecture.id}
+                            className="notes-library-row"
+                          >
+                            <div className="notes-library-row-header">
+                              <div className="notes-library-row-genre">
+                                {lecture.genre_label || "Uncategorized"}
+                              </div>
+                              <h2 className="notes-library-row-title">
+                                {lecture.title}
+                              </h2>
                             </div>
-                            <h2 className="notes-library-row-title">
-                              {lecture.title}
-                            </h2>
-                          </div>
 
-                          <div className="notes-library-row-body">
-                            <p className="notes-library-row-summary-text">
-                              {lecture.summary || "Summary is not available yet."}
-                            </p>
+                            <div className="notes-library-row-body">
+                              <p className="notes-library-row-summary-text">
+                                {lecture.summary || "Summary is not available yet."}
+                              </p>
 
-                            {keyPoints.length > 0 && (
-                              <ul className="notes-library-row-key-points">
-                                {keyPoints.map((point, index) => (
-                                  <li key={`${lecture.id}-${index}`}>
-                                    {point}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-
-                          <div className="notes-library-row-footer">
-                            <div className="notes-library-row-footer-actions">
-                              <span
-                                className="notes-library-row-score"
-                                style={{ color: getScoreColor(lecture.confidence_score) }}
-                              >
-                                Confidence: {formatScore(lecture.confidence_score)}
-                              </span>
-                              <Link href={`/dashboard/lecture/${lecture.id}`} className="btn-outline">
-                                Open Notes
-                              </Link>
+                              {keyPoints.length > 0 && (
+                                <ul className="notes-library-row-key-points">
+                                  {keyPoints.map((point, index) => (
+                                    <li key={`${lecture.id}-${index}`}>
+                                      {point}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
-                          </div>
-                        </article>
-                      );
-                    })}
+
+                            <div className="notes-library-row-footer">
+                              <div className="notes-library-move-wrap">
+                                <span className="notes-library-move-label">Maktabadda:</span>
+                                <select
+                                  className="notes-library-move-select"
+                                  value={group.category}
+                                  onChange={(e) => handleMoveLecture(lecture.id, group.category, e.target.value)}
+                                >
+                                  {genreGroups.map((g) => (
+                                    <option key={g.category} value={g.category}>
+                                      {g.category}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="notes-library-row-footer-actions">
+                                <span
+                                  className="notes-library-row-score"
+                                  style={{ color: getScoreColor(lecture.confidence_score) }}
+                                >
+                                  Confidence: {formatScore(lecture.confidence_score)}
+                                </span>
+                                <Link href={`/dashboard/lecture/${lecture.id}`} className="btn-outline">
+                                  Open Notes
+                                </Link>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </section>
             );
           })}
+        </div>
+      )}
+      {showCreateModal && (
+        <div className="notes-library-modal-overlay" onClick={() => { setShowCreateModal(false); setNewLibraryName(""); }}>
+          <div className="notes-library-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Abuur Maktabad Cusub</h3>
+            <p>Geli magaca maktabadda cusub ee aad rabto inaad abuurto:</p>
+            <input
+              type="text"
+              placeholder="Magaca maktabadda (e.g. Speech & Motivation)"
+              value={newLibraryName}
+              onChange={(e) => setNewLibraryName(e.target.value)}
+              className="notes-library-modal-input"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateLibraryConfirm();
+                if (e.key === "Escape") {
+                  setShowCreateModal(false);
+                  setNewLibraryName("");
+                }
+              }}
+            />
+            <div className="notes-library-modal-actions">
+              <button
+                type="button"
+                className="notes-library-modal-btn cancel"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewLibraryName("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="notes-library-modal-btn save"
+                onClick={handleCreateLibraryConfirm}
+              >
+                Create
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

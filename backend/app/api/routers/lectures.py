@@ -19,7 +19,7 @@ from app.schemas.chat import (
     LectureChatAskResponse,
     LectureChatMessageDetail,
 )
-from app.schemas.lecture import LectureCreate, Lecture, LectureDetail, LectureLog
+from app.schemas.lecture import LectureCreate, Lecture, LectureDetail, LectureLog, LectureUpdateCategoryRequest, CategoryRenameRequest
 from app.schemas.quiz import (
     QuizResponse,
     QuizAttemptSubmit,
@@ -222,9 +222,7 @@ def _resolve_subject_category(
     title: str | None,
 ) -> str:
     clean_category = (subject_category or "").strip()
-    known_categories = {category for category, _keywords in SUBJECT_CATEGORY_RULES}
-    known_categories.add("Other Subjects")
-    if clean_category in known_categories and clean_category != "Other Subjects":
+    if clean_category:
         return clean_category
 
     clean_genre = (genre_label or "").strip()
@@ -236,7 +234,7 @@ def _resolve_subject_category(
             if any(_keyword_matches(source_text, keyword) for keyword in keywords):
                 return category
 
-    return clean_category or (clean_genre if clean_genre and clean_genre != "Uncategorized" else "Other Subjects")
+    return clean_genre if clean_genre and clean_genre != "Uncategorized" else "Other Subjects"
 
 
 def _get_user_from_media_token(db: Session, token: str | None) -> User:
@@ -946,5 +944,102 @@ def update_lecture_title(
     db.commit()
     db.refresh(lecture)
     return lecture
+
+
+@router.patch("/{lecture_id}/subject-category", response_model=Lecture)
+def update_lecture_subject_category(
+    *,
+    lecture_id: int,
+    payload: LectureUpdateCategoryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Update the subject category of a lecture."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    lecture_service = LectureService(db)
+    lecture = lecture_service.get_lecture(lecture_id=lecture_id, owner_id=current_user.id)
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+
+    trimmed_category = payload.subject_category.strip()
+    if not trimmed_category:
+        raise HTTPException(status_code=400, detail="Subject category cannot be empty")
+
+    if not lecture.transcript:
+        raise HTTPException(status_code=400, detail="Lecture transcript not found. Notes category cannot be updated.")
+
+    meta = lecture.transcript.metadata_json or {}
+    if not isinstance(meta, dict):
+        meta = {}
+
+    if "analysis" not in meta or not isinstance(meta["analysis"], dict):
+        meta["analysis"] = {}
+
+    meta["analysis"]["subject_category"] = trimmed_category
+    lecture.transcript.metadata_json = meta
+    flag_modified(lecture.transcript, "metadata_json")
+
+    db.commit()
+    db.refresh(lecture)
+    return lecture
+
+
+@router.post("/notes-library/rename-category")
+def rename_notes_category(
+    *,
+    payload: CategoryRenameRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Rename a category across all completed lectures belonging to the user."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    old_cat = payload.old_category.strip()
+    new_cat = payload.new_category.strip()
+    if not old_cat or not new_cat:
+        raise HTTPException(status_code=400, detail="Category names cannot be empty")
+
+    lectures = (
+        db.query(ModelLecture)
+        .options(joinedload(ModelLecture.transcript))
+        .filter(
+            ModelLecture.owner_id == current_user.id,
+            ModelLecture.status == LectureStatus.completed,
+        )
+        .all()
+    )
+
+    updated_count = 0
+    for lecture in lectures:
+        if not lecture.transcript:
+            continue
+
+        meta = lecture.transcript.metadata_json or {}
+        if not isinstance(meta, dict):
+            meta = {}
+
+        analysis = meta.get("analysis") or {}
+        if not isinstance(analysis, dict):
+            analysis = {}
+
+        genre_label = analysis.get("genre_label") or "Uncategorized"
+
+        current_cat = _resolve_subject_category(
+            analysis.get("subject_category"),
+            genre_label,
+            lecture.title,
+        )
+
+        if current_cat == old_cat:
+            if "analysis" not in meta or not isinstance(meta["analysis"], dict):
+                meta["analysis"] = {}
+            meta["analysis"]["subject_category"] = new_cat
+            lecture.transcript.metadata_json = meta
+            flag_modified(lecture.transcript, "metadata_json")
+            updated_count += 1
+
+    db.commit()
+    return {"message": f"Successfully renamed category from '{old_cat}' to '{new_cat}'.", "updated_count": updated_count}
 
 
